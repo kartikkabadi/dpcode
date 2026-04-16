@@ -2,6 +2,8 @@ import {
   CODEX_REASONING_EFFORT_OPTIONS,
   type ClaudeCodeEffort,
   type CodexReasoningEffort,
+  type GeminiThinkingBudget,
+  type GeminiThinkingLevel,
   type ModelSlug,
   ModelSelection,
   ProjectId,
@@ -36,6 +38,7 @@ import {
   ensureInlineTerminalContextPlaceholders,
   normalizeTerminalContextText,
 } from "./lib/terminalContext";
+import { buildModelSelection } from "./providerModelOptions";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { createDebouncedStorage, createMemoryStorage } from "./lib/storage";
@@ -571,7 +574,7 @@ function shouldRemoveDraft(draft: ComposerThreadDraftState): boolean {
 }
 
 function normalizeProviderKind(value: unknown): ProviderKind | null {
-  return value === "codex" || value === "claudeAgent" ? value : null;
+  return value === "codex" || value === "claudeAgent" || value === "gemini" ? value : null;
 }
 
 function normalizeProviderModelOptions(
@@ -587,6 +590,10 @@ function normalizeProviderModelOptions(
   const claudeCandidate =
     candidate?.claudeAgent && typeof candidate.claudeAgent === "object"
       ? (candidate.claudeAgent as Record<string, unknown>)
+      : null;
+  const geminiCandidate =
+    candidate?.gemini && typeof candidate.gemini === "object"
+      ? (candidate.gemini as Record<string, unknown>)
       : null;
 
   const codexReasoningEffort: CodexReasoningEffort | undefined =
@@ -648,12 +655,37 @@ function normalizeProviderModelOptions(
         }
       : undefined;
 
-  if (!codex && !claude) {
+  const geminiThinkingLevel: GeminiThinkingLevel | undefined =
+    geminiCandidate?.thinkingLevel === "LOW" || geminiCandidate?.thinkingLevel === "HIGH"
+      ? geminiCandidate.thinkingLevel
+      : undefined;
+  const rawGeminiThinkingBudget =
+    typeof geminiCandidate?.thinkingBudget === "number"
+      ? geminiCandidate.thinkingBudget
+      : typeof geminiCandidate?.thinkingBudget === "string"
+        ? Number(geminiCandidate.thinkingBudget)
+        : undefined;
+  const geminiThinkingBudget: GeminiThinkingBudget | undefined =
+    rawGeminiThinkingBudget === -1 ||
+    rawGeminiThinkingBudget === 0 ||
+    rawGeminiThinkingBudget === 512
+      ? rawGeminiThinkingBudget
+      : undefined;
+  const gemini =
+    geminiThinkingLevel !== undefined || geminiThinkingBudget !== undefined
+      ? {
+          ...(geminiThinkingLevel !== undefined ? { thinkingLevel: geminiThinkingLevel } : {}),
+          ...(geminiThinkingBudget !== undefined ? { thinkingBudget: geminiThinkingBudget } : {}),
+        }
+      : undefined;
+
+  if (!codex && !claude && !gemini) {
     return null;
   }
   return {
     ...(codex ? { codex } : {}),
     ...(claude ? { claudeAgent: claude } : {}),
+    ...(gemini ? { gemini } : {}),
   };
 }
 
@@ -684,12 +716,13 @@ function normalizeModelSelection(
     provider,
     provider === "codex" ? legacy?.legacyCodex : undefined,
   );
-  const options = provider === "codex" ? modelOptions?.codex : modelOptions?.claudeAgent;
-  return {
-    provider,
-    model,
-    ...(options ? { options } : {}),
-  };
+  const options =
+    provider === "codex"
+      ? modelOptions?.codex
+      : provider === "claudeAgent"
+        ? modelOptions?.claudeAgent
+        : modelOptions?.gemini;
+  return buildModelSelection(provider, model, options);
 }
 
 // ── Legacy sync helpers (used only during migration from v2 storage) ──
@@ -702,11 +735,7 @@ function legacySyncModelSelectionOptions(
     return null;
   }
   const options = modelOptions?.[modelSelection.provider];
-  return {
-    provider: modelSelection.provider,
-    model: modelSelection.model,
-    ...(options ? { options } : {}),
-  };
+  return buildModelSelection(modelSelection.provider, modelSelection.model, options);
 }
 
 function legacyMergeModelSelectionIntoProviderModelOptions(
@@ -750,17 +779,14 @@ function legacyToModelSelectionByProvider(
   const result: Partial<Record<ProviderKind, ModelSelection>> = {};
   // Add entries from the options bag (for non-active providers)
   if (modelOptions) {
-    for (const provider of ["codex", "claudeAgent"] as const) {
+    for (const provider of ["codex", "claudeAgent", "gemini"] as const) {
       const options = modelOptions[provider];
       if (options && Object.keys(options).length > 0) {
-        result[provider] = {
+        result[provider] = buildModelSelection(
           provider,
-          model:
-            modelSelection?.provider === provider
-              ? modelSelection.model
-              : getDefaultModel(provider),
+          modelSelection?.provider === provider ? modelSelection.model : getDefaultModel(provider),
           options,
-        };
+        );
       }
     }
   }
@@ -819,7 +845,7 @@ export function resolvePreferredComposerModelSelection(input: {
   defaultProvider?: ProviderKind | null | undefined;
 }): ModelSelection {
   const draftProviderWithSelection =
-    (["codex", "claudeAgent"] as const).find(
+    (["codex", "claudeAgent", "gemini"] as const).find(
       (provider) => input.draft?.modelSelectionByProvider?.[provider] !== undefined,
     ) ?? null;
   const preferredProvider =
@@ -2222,11 +2248,11 @@ export const useComposerDraftStore = create<ComposerDraftStoreState>()(
               nextMap[normalized.provider] = normalized;
             } else {
               // No options in selection → preserve existing options, update provider+model
-              nextMap[normalized.provider] = {
-                provider: normalized.provider,
-                model: normalized.model,
-                ...(current?.options ? { options: current.options } : {}),
-              };
+              nextMap[normalized.provider] = buildModelSelection(
+                normalized.provider,
+                normalized.model,
+                current?.options,
+              );
             }
           }
           const nextActiveProvider = normalized?.provider ?? base.activeProvider;
@@ -2262,21 +2288,20 @@ export const useComposerDraftStore = create<ComposerDraftStoreState>()(
           }
           const base = existing ?? createEmptyThreadDraft();
           const nextMap = { ...base.modelSelectionByProvider };
-          for (const provider of ["codex", "claudeAgent"] as const) {
+          for (const provider of ["codex", "claudeAgent", "gemini"] as const) {
             // Only touch providers explicitly present in the input
             if (!normalizedOpts || !(provider in normalizedOpts)) continue;
             const opts = normalizedOpts[provider];
             const current = nextMap[provider];
             if (opts) {
-              nextMap[provider] = {
+              nextMap[provider] = buildModelSelection(
                 provider,
-                model: current?.model ?? getDefaultModel(provider),
-                options: opts,
-              };
+                current?.model ?? getDefaultModel(provider),
+                opts,
+              );
             } else if (current?.options) {
               // Remove options but keep the selection
-              const { options: _, ...rest } = current;
-              nextMap[provider] = rest as ModelSelection;
+              nextMap[provider] = buildModelSelection(provider, current.model);
             }
           }
           if (Equal.equals(base.modelSelectionByProvider, nextMap)) {
@@ -2318,14 +2343,16 @@ export const useComposerDraftStore = create<ComposerDraftStoreState>()(
           const nextMap = { ...base.modelSelectionByProvider };
           const currentForProvider = nextMap[normalizedProvider];
           if (providerOpts) {
-            nextMap[normalizedProvider] = {
-              provider: normalizedProvider,
-              model: currentForProvider?.model ?? getDefaultModel(normalizedProvider),
-              options: providerOpts,
-            };
+            nextMap[normalizedProvider] = buildModelSelection(
+              normalizedProvider,
+              currentForProvider?.model ?? getDefaultModel(normalizedProvider),
+              providerOpts,
+            );
           } else if (currentForProvider?.options) {
-            const { options: _, ...rest } = currentForProvider;
-            nextMap[normalizedProvider] = rest as ModelSelection;
+            nextMap[normalizedProvider] = buildModelSelection(
+              normalizedProvider,
+              currentForProvider.model,
+            );
           }
 
           // Handle sticky persistence
@@ -2336,19 +2363,18 @@ export const useComposerDraftStore = create<ComposerDraftStoreState>()(
             const stickyBase =
               nextStickyMap[normalizedProvider] ??
               base.modelSelectionByProvider[normalizedProvider] ??
-              ({
-                provider: normalizedProvider,
-                model: getDefaultModel(normalizedProvider),
-              } as ModelSelection);
+              buildModelSelection(normalizedProvider, getDefaultModel(normalizedProvider));
             if (providerOpts) {
-              nextStickyMap[normalizedProvider] = {
-                ...stickyBase,
-                provider: normalizedProvider,
-                options: providerOpts,
-              };
+              nextStickyMap[normalizedProvider] = buildModelSelection(
+                normalizedProvider,
+                stickyBase.model,
+                providerOpts,
+              );
             } else if (stickyBase.options) {
-              const { options: _, ...rest } = stickyBase;
-              nextStickyMap[normalizedProvider] = rest as ModelSelection;
+              nextStickyMap[normalizedProvider] = buildModelSelection(
+                normalizedProvider,
+                stickyBase.model,
+              );
             }
             nextStickyActiveProvider = base.activeProvider ?? normalizedProvider;
           }

@@ -59,6 +59,7 @@ import { resolveProviderDiscoveryCwd } from "~/lib/providerDiscovery";
 import {
   providerComposerCapabilitiesQueryOptions,
   providerCommandsQueryOptions,
+  providerModelsQueryOptions,
   providerPluginsQueryOptions,
   providerSkillsQueryOptions,
   supportsNativeSlashCommandDiscovery,
@@ -270,7 +271,11 @@ import {
   resolveThreadHandoffBadgeLabel,
 } from "../lib/threadHandoff";
 import { resolveThreadEnvironmentMode } from "../lib/threadEnvironment";
-import { buildNextProviderOptions } from "../providerModelOptions";
+import {
+  buildModelSelection,
+  buildNextProviderOptions,
+  mergeProviderModelOptions,
+} from "../providerModelOptions";
 
 const ATTACHMENT_PREVIEW_HANDOFF_TTL_MS = 5000;
 const IMAGE_SIZE_LIMIT_LABEL = `${Math.round(PROVIDER_SEND_TURN_MAX_IMAGE_BYTES / (1024 * 1024))}MB`;
@@ -1191,19 +1196,27 @@ export default function ChatView({
   const selectedPromptEffort = composerProviderState.promptEffort;
   const selectedModelOptionsForDispatch = composerProviderState.modelOptionsForDispatch;
   const selectedModelSelection = useMemo<ModelSelection>(
-    () => ({
-      provider: selectedProvider,
-      model: selectedModel,
-      ...(selectedModelOptionsForDispatch ? { options: selectedModelOptionsForDispatch } : {}),
-    }),
+    () => buildModelSelection(selectedProvider, selectedModel, selectedModelOptionsForDispatch),
     [selectedModel, selectedModelOptionsForDispatch, selectedProvider],
   );
   const providerOptionsForDispatch = useMemo(() => getProviderStartOptions(settings), [settings]);
   const selectedModelForPicker = selectedModel;
-  const modelOptionsByProvider = useMemo(
-    () => getCustomModelOptionsByProvider(settings),
-    [settings],
+  const geminiModelsQuery = useQuery(
+    providerModelsQueryOptions({
+      provider: "gemini",
+      enabled: selectedProvider === "gemini" || lockedProvider === "gemini",
+    }),
   );
+  const modelOptionsByProvider = useMemo(() => {
+    const staticModelOptionsByProvider = getCustomModelOptionsByProvider(settings);
+    return {
+      ...staticModelOptionsByProvider,
+      gemini: mergeProviderModelOptions(
+        staticModelOptionsByProvider.gemini,
+        geminiModelsQuery.data?.models ?? [],
+      ),
+    };
+  }, [geminiModelsQuery.data?.models, settings]);
   const selectedModelForPickerWithCustomFallback = useMemo(() => {
     const currentOptions = modelOptionsByProvider[selectedProvider];
     return currentOptions.some((option) => option.slug === selectedModelForPicker)
@@ -4322,16 +4335,13 @@ export default function ChatView({
       }
       // Keep the optimistic label short while the server asks Codex for a better summary.
       const title = buildPromptThreadTitleFallback(titleSeed);
-      const threadCreateModelSelection: ModelSelection = {
-        provider: selectedProviderForSend,
-        model:
-          selectedModelForSend ||
+      const threadCreateModelSelection: ModelSelection = buildModelSelection(
+        selectedProviderForSend,
+        selectedModelForSend ||
           activeProject.defaultModelSelection?.model ||
           DEFAULT_MODEL_BY_PROVIDER.codex,
-        ...(selectedModelSelectionForSend.options
-          ? { options: selectedModelSelectionForSend.options }
-          : {}),
-      };
+        selectedModelSelectionForSend.options,
+      );
 
       if (isLocalDraftThread) {
         await api.orchestration.dispatchCommand({

@@ -4,6 +4,7 @@
 // Depends on: ChatView, splitViewStore, and pane-scoped browser/diff panels
 
 import {
+  type ProviderKind,
   type ProjectId,
   ThreadId,
   type ThreadId as ThreadIdType,
@@ -26,7 +27,7 @@ import { TbExchange } from "react-icons/tb";
 
 import ChatView from "../components/ChatView";
 import BrowserPanel from "../components/BrowserPanel";
-import { ClaudeAI, OpenAI } from "../components/Icons";
+import { ClaudeAI, Gemini, OpenAI } from "../components/Icons";
 import { DiffWorkerPoolProvider } from "../components/DiffWorkerPoolProvider";
 import {
   DiffPanelHeaderSkeleton,
@@ -420,7 +421,7 @@ function SplitPaneEmptyState(props: {
     id: ThreadIdType;
     title: string | null;
     projectId: ProjectId;
-    modelSelection: { provider: "codex" | "claudeAgent" };
+    modelSelection: { provider: ProviderKind };
   }[];
   projects: readonly { id: ProjectId; name: string }[];
   otherPaneThreadId: ThreadIdType | null;
@@ -475,9 +476,12 @@ function SplitPaneEmptyState(props: {
   );
 }
 
-function PickerProviderGlyph(props: { provider: "codex" | "claudeAgent"; className?: string }) {
+function PickerProviderGlyph(props: { provider: ProviderKind; className?: string }) {
   if (props.provider === "claudeAgent") {
     return <ClaudeAI aria-hidden="true" className={cn("text-foreground", props.className)} />;
+  }
+  if (props.provider === "gemini") {
+    return <Gemini aria-hidden="true" className={cn("text-foreground", props.className)} />;
   }
 
   return <OpenAI aria-hidden="true" className={cn("text-muted-foreground/60", props.className)} />;
@@ -492,7 +496,7 @@ function SplitPaneSurface(props: {
     id: ThreadIdType;
     title: string | null;
     projectId: ProjectId;
-    modelSelection: { provider: "codex" | "claudeAgent" };
+    modelSelection: { provider: ProviderKind };
   }[];
   projects: readonly { id: ProjectId; name: string }[];
   onFocus: () => void;

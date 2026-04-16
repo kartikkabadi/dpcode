@@ -1926,6 +1926,14 @@ describe("ProviderCommandReactor", () => {
       providerThreadId: "child-provider-1",
     });
 
+    await waitFor(async () => {
+      const readModel = await Effect.runPromise(harness.engine.getReadModel());
+      const thread = readModel.threads.find(
+        (entry) => entry.id === "subagent:thread-1:child-provider-1",
+      );
+      return thread?.session?.status === "interrupted";
+    });
+
     const readModel = await Effect.runPromise(harness.engine.getReadModel());
     const thread = readModel.threads.find(
       (entry) => entry.id === "subagent:thread-1:child-provider-1",

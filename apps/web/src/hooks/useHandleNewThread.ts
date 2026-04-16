@@ -2,7 +2,11 @@ import { type ProjectId, ThreadId, DEFAULT_MODEL_BY_PROVIDER } from "@t3tools/co
 import { useNavigate } from "@tanstack/react-router";
 import { useCallback } from "react";
 import { useAppSettings } from "../appSettings";
-import { type DraftThreadState, useComposerDraftStore } from "../composerDraftStore";
+import {
+  type ComposerThreadDraftState,
+  type DraftThreadState,
+  useComposerDraftStore,
+} from "../composerDraftStore";
 import {
   buildDraftThreadContextPatch,
   createActiveDraftThreadSnapshot,
@@ -40,6 +44,25 @@ export function useHandleNewThread() {
         setModelSelection(threadId, {
           provider: options.provider,
           model: DEFAULT_MODEL_BY_PROVIDER[options.provider],
+        });
+      };
+      const restoreComposerDraft = (
+        threadId: ThreadId,
+        draftState: ComposerThreadDraftState | null,
+      ) => {
+        if (!draftState) {
+          return;
+        }
+        useComposerDraftStore.setState((state) => {
+          if (state.draftsByThreadId[threadId] === draftState) {
+            return state;
+          }
+          return {
+            draftsByThreadId: {
+              ...state.draftsByThreadId,
+              [threadId]: draftState,
+            },
+          };
         });
       };
       const activateThreadEntryPoint = (threadId: ThreadId) => {
@@ -89,6 +112,7 @@ export function useHandleNewThread() {
       const resolveCreationState = (
         targetThreadId: ThreadId,
         draftThread: DraftThreadState | null,
+        creationOptions: NewThreadOptions | undefined,
       ) =>
         resolveTerminalThreadCreationState({
           activeDraftThread: activeDraftThreadSnapshot,
@@ -97,7 +121,7 @@ export function useHandleNewThread() {
           draftComposerState:
             useComposerDraftStore.getState().draftsByThreadId[targetThreadId] ?? null,
           draftThread,
-          options,
+          options: creationOptions,
           projectDefaultModelSelection,
           projectId,
         });
@@ -134,20 +158,32 @@ export function useHandleNewThread() {
           if (wantsTemporaryThread) {
             markTemporaryThread(bootstrapPlan.threadId);
           }
+          const preservedComposerDraft =
+            useComposerDraftStore.getState().draftsByThreadId[bootstrapPlan.threadId] ?? null;
           let resolvedStoredDraftThread: DraftThreadState | null = bootstrapPlan.draftThread;
-          const draftContextPatch = buildDraftThreadContextPatch(entryPoint, options);
+          const shouldPreserveStoredTerminalContext =
+            entryPoint === "terminal" && bootstrapPlan.draftThread.entryPoint === "terminal";
+          const draftContextPatch = shouldPreserveStoredTerminalContext
+            ? null
+            : buildDraftThreadContextPatch(entryPoint, options);
+          const creationOptions = shouldPreserveStoredTerminalContext ? undefined : options;
           if (draftContextPatch) {
             setDraftThreadContext(bootstrapPlan.threadId, draftContextPatch);
             resolvedStoredDraftThread = getDraftThread(bootstrapPlan.threadId);
           }
           applyProviderOverride(bootstrapPlan.threadId);
           setProjectDraftThreadId(projectId, bootstrapPlan.threadId, { entryPoint });
+          restoreComposerDraft(bootstrapPlan.threadId, preservedComposerDraft);
           activateThreadEntryPoint(bootstrapPlan.threadId);
           if (focusedThreadId === bootstrapPlan.threadId) {
             if (entryPoint === "terminal") {
               await createTerminalThread(
                 bootstrapPlan.threadId,
-                resolveCreationState(bootstrapPlan.threadId, resolvedStoredDraftThread),
+                resolveCreationState(
+                  bootstrapPlan.threadId,
+                  resolvedStoredDraftThread,
+                  creationOptions,
+                ),
               );
             }
             return;
@@ -156,10 +192,15 @@ export function useHandleNewThread() {
             to: "/$threadId",
             params: { threadId: bootstrapPlan.threadId },
           });
+          restoreComposerDraft(bootstrapPlan.threadId, preservedComposerDraft);
           if (entryPoint === "terminal") {
             await createTerminalThread(
               bootstrapPlan.threadId,
-              resolveCreationState(bootstrapPlan.threadId, resolvedStoredDraftThread),
+              resolveCreationState(
+                bootstrapPlan.threadId,
+                resolvedStoredDraftThread,
+                creationOptions,
+              ),
             );
           }
         })();
@@ -171,6 +212,8 @@ export function useHandleNewThread() {
         if (wantsTemporaryThread) {
           markTemporaryThread(bootstrapPlan.threadId);
         }
+        const preservedComposerDraft =
+          useComposerDraftStore.getState().draftsByThreadId[bootstrapPlan.threadId] ?? null;
         let resolvedActiveDraftThread: DraftThreadState | null = bootstrapPlan.draftThread;
         const draftContextPatch = buildDraftThreadContextPatch(entryPoint, options);
         if (draftContextPatch) {
@@ -179,11 +222,12 @@ export function useHandleNewThread() {
         }
         applyProviderOverride(bootstrapPlan.threadId);
         setProjectDraftThreadId(projectId, bootstrapPlan.threadId, { entryPoint });
+        restoreComposerDraft(bootstrapPlan.threadId, preservedComposerDraft);
         activateThreadEntryPoint(bootstrapPlan.threadId);
         if (entryPoint === "terminal") {
           return createTerminalThread(
             bootstrapPlan.threadId,
-            resolveCreationState(bootstrapPlan.threadId, resolvedActiveDraftThread),
+            resolveCreationState(bootstrapPlan.threadId, resolvedActiveDraftThread, options),
           );
         }
         return Promise.resolve();
@@ -213,7 +257,7 @@ export function useHandleNewThread() {
         if (entryPoint === "terminal") {
           await createTerminalThread(
             threadId,
-            resolveCreationState(threadId, getDraftThread(threadId)),
+            resolveCreationState(threadId, getDraftThread(threadId), options),
           );
         }
       })();

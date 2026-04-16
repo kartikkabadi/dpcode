@@ -54,6 +54,7 @@ import {
   type OrchestrationReadModel,
   PROVIDER_DISPLAY_NAMES,
   ProjectId,
+  type ProviderKind,
   ThreadId,
   type GitStatusResult,
   type ResolvedKeybindingsConfig,
@@ -84,7 +85,7 @@ import { readNativeApi } from "../nativeApi";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { resolveThreadEnvironmentPresentation } from "../lib/threadEnvironment";
 import { type SidebarThreadSummary, type Thread } from "../types";
-import { ClaudeAI, OpenAI } from "./Icons";
+import { ClaudeAI, Gemini, OpenAI } from "./Icons";
 import { ProjectSidebarIcon } from "./ProjectSidebarIcon";
 import { ThreadPinToggleButton } from "./ThreadPinToggleButton";
 import { RenameThreadDialog } from "./RenameThreadDialog";
@@ -216,15 +217,12 @@ function wait(ms: number): Promise<void> {
   });
 }
 
-function ProviderGlyph({
-  provider,
-  className,
-}: {
-  provider: "codex" | "claudeAgent";
-  className?: string;
-}) {
+function ProviderGlyph({ provider, className }: { provider: ProviderKind; className?: string }) {
   if (provider === "claudeAgent") {
     return <ClaudeAI aria-hidden="true" className={cn("text-foreground", className)} />;
+  }
+  if (provider === "gemini") {
+    return <Gemini aria-hidden="true" className={cn("text-foreground", className)} />;
   }
   return <OpenAI aria-hidden="true" className={cn("text-muted-foreground/60", className)} />;
 }
@@ -233,8 +231,8 @@ function HandoffProviderGlyph({
   sourceProvider,
   targetProvider,
 }: {
-  sourceProvider: "codex" | "claudeAgent";
-  targetProvider: "codex" | "claudeAgent";
+  sourceProvider: ProviderKind;
+  targetProvider: ProviderKind;
 }) {
   return (
     <div className="relative h-4.5 w-5 shrink-0">
@@ -320,7 +318,7 @@ function resolveThreadRowMetaBadge(input: {
 
 type SidebarSplitPreview = {
   title: string;
-  provider: "codex" | "claudeAgent";
+  provider: ProviderKind;
   threadId: ThreadId | null;
 };
 

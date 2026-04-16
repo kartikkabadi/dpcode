@@ -1,6 +1,6 @@
 import { type ModelSlug, type ProviderKind, type ServerProviderStatus } from "@t3tools/contracts";
 import { resolveSelectableModel } from "@t3tools/shared/model";
-import { memo, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { type ProviderPickerKind, PROVIDER_OPTIONS } from "../../session-logic";
 import {
   Menu,
@@ -15,8 +15,10 @@ import {
   MenuSubTrigger,
   MenuTrigger,
 } from "../ui/menu";
-import { ClaudeAI, Icon, OpenAI } from "../Icons";
+import { ClaudeAI, Gemini, Icon, OpenAI } from "../Icons";
 import { cn } from "~/lib/utils";
+import { readNativeApi } from "~/nativeApi";
+import { mergeProviderModelOptions } from "~/providerModelOptions";
 import { PickerTriggerButton } from "./PickerTriggerButton";
 
 function isAvailableProviderOption(option: (typeof PROVIDER_OPTIONS)[number]): option is {
@@ -30,6 +32,7 @@ function isAvailableProviderOption(option: (typeof PROVIDER_OPTIONS)[number]): o
 const PROVIDER_ICON_BY_PROVIDER: Record<ProviderPickerKind, Icon> = {
   codex: OpenAI,
   claudeAgent: ClaudeAI,
+  gemini: Gemini,
 };
 
 function resolveLiveProviderAvailability(provider: ServerProviderStatus | undefined): {
@@ -70,7 +73,9 @@ function providerIconClassName(
   provider: ProviderKind | ProviderPickerKind,
   fallbackClassName: string,
 ): string {
-  return provider === "claudeAgent" ? "text-foreground" : fallbackClassName;
+  return provider === "claudeAgent" || provider === "gemini"
+    ? "text-foreground"
+    : fallbackClassName;
 }
 
 export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
@@ -85,19 +90,56 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   onProviderModelChange: (provider: ProviderKind, model: ModelSlug) => void;
 }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [runtimeGeminiModels, setRuntimeGeminiModels] = useState<
+    ReadonlyArray<{ slug: string; name: string }>
+  >([]);
+  const runtimeGeminiModelsRequestedRef = useRef(false);
+  const runtimeGeminiModelsEnabled =
+    props.providers?.find((entry) => entry.provider === "gemini")?.authStatus !== "unauthenticated";
+  useEffect(() => {
+    if (!isMenuOpen || !runtimeGeminiModelsEnabled || runtimeGeminiModelsRequestedRef.current) {
+      return;
+    }
+
+    const api = readNativeApi();
+    if (!api) {
+      return;
+    }
+
+    runtimeGeminiModelsRequestedRef.current = true;
+    let cancelled = false;
+
+    void api.provider
+      .listModels({ provider: "gemini" })
+      .then((result) => {
+        if (!cancelled) {
+          setRuntimeGeminiModels(result.models);
+        }
+      })
+      .catch(() => {
+        runtimeGeminiModelsRequestedRef.current = false;
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isMenuOpen, runtimeGeminiModelsEnabled]);
+  const modelOptionsByProvider = useMemo(
+    () => ({
+      ...props.modelOptionsByProvider,
+      gemini: mergeProviderModelOptions(props.modelOptionsByProvider.gemini, runtimeGeminiModels),
+    }),
+    [props.modelOptionsByProvider, runtimeGeminiModels],
+  );
   const activeProvider = props.lockedProvider ?? props.provider;
-  const selectedProviderOptions = props.modelOptionsByProvider[activeProvider];
+  const selectedProviderOptions = modelOptionsByProvider[activeProvider];
   const selectedModelLabel =
     selectedProviderOptions.find((option) => option.slug === props.model)?.name ?? props.model;
   const ProviderIcon = PROVIDER_ICON_BY_PROVIDER[activeProvider];
   const handleModelChange = (provider: ProviderKind, value: string) => {
     if (props.disabled) return;
     if (!value) return;
-    const resolvedModel = resolveSelectableModel(
-      provider,
-      value,
-      props.modelOptionsByProvider[provider],
-    );
+    const resolvedModel = resolveSelectableModel(provider, value, modelOptionsByProvider[provider]);
     if (!resolvedModel) return;
     props.onProviderModelChange(provider, resolvedModel);
     setIsMenuOpen(false);
@@ -142,7 +184,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
               value={props.model}
               onValueChange={(value) => handleModelChange(props.lockedProvider!, value)}
             >
-              {props.modelOptionsByProvider[props.lockedProvider].map((modelOption) => (
+              {modelOptionsByProvider[props.lockedProvider].map((modelOption) => (
                 <MenuRadioItem
                   key={`${props.lockedProvider}:${modelOption.slug}`}
                   value={modelOption.slug}
@@ -196,7 +238,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
                         value={props.provider === option.value ? props.model : ""}
                         onValueChange={(value) => handleModelChange(option.value, value)}
                       >
-                        {props.modelOptionsByProvider[option.value].map((modelOption) => (
+                        {modelOptionsByProvider[option.value].map((modelOption) => (
                           <MenuRadioItem
                             key={`${option.value}:${modelOption.slug}`}
                             value={modelOption.slug}
