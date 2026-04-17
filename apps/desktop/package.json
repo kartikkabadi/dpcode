@@ -11,7 +11,8 @@
     "start": "bun run scripts/start-electron.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
-    "smoke-test": "node scripts/smoke-test.mjs"
+    "smoke-test": "node scripts/smoke-test.mjs",
+    "build:native": "node-gyp rebuild --directory native/liquidglass"
   },
   "dependencies": {
     "effect": "catalog:",
@@ -25,7 +26,9 @@
     "tsdown": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:",
-    "wait-on": "^8.0.2"
+    "wait-on": "^8.0.2",
+    "node-addon-api": "^8.4.0",
+    "node-gyp": "^11.2.0"
   },
   "productName": "DP Code (Alpha)"
 }

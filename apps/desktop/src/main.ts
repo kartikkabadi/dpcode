@@ -55,6 +55,7 @@ import {
   reduceDesktopUpdateStateOnUpdateAvailable,
 } from "./updateMachine";
 import { isArm64HostRunningIntelBuild, resolveDesktopRuntimeInfo } from "./runtimeArch";
+import liquidGlass from "./liquidGlass";
 import { DesktopBrowserManager } from "./browserManager";
 
 syncShellEnvironment();
@@ -1521,10 +1522,8 @@ function createWindow(): BrowserWindow {
     autoHideMenuBar: true,
     ...getIconOption(),
     title: APP_DISPLAY_NAME,
-    titleBarStyle: "hiddenInset",
-    trafficLightPosition: { x: 16, y: 18 },
-    vibrancy: "under-window",
-    visualEffectState: "active",
+    transparent: true,
+    frame: false,
     backgroundColor: "#00000000",
     webPreferences: {
       preload: Path.join(__dirname, "preload.js"),
@@ -1534,6 +1533,13 @@ function createWindow(): BrowserWindow {
     },
   });
   browserManager.setWindow(window);
+
+  window.webContents.once("did-finish-load", () => {
+    liquidGlass.addView(window.getNativeWindowHandle(), {
+      cornerRadius: 0,
+      opaque: false,
+    });
+  });
 
   window.webContents.on("context-menu", (event, params) => {
     event.preventDefault();
