@@ -50,7 +50,7 @@
     @apply border-border outline-ring/30;
   }
   body {
-    @apply bg-transparent text-foreground relative;
+    @apply bg-transparent text-foreground relative isolate;
   }
 }
 
@@ -65,6 +65,68 @@
     opacity: 0.24;
     transform: scale(0.7);
     will-change: opacity, transform;
+  }
+
+  .glass-panel {
+    position: relative;
+    isolation: isolate;
+    border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+    background: color-mix(in srgb, var(--card) 74%, transparent);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    box-shadow:
+      0 18px 60px color-mix(in srgb, var(--foreground) 10%, transparent),
+      inset 0 1px 0 color-mix(in srgb, var(--color-white) 26%, transparent);
+  }
+
+  .dark .glass-panel {
+    border-color: color-mix(in srgb, var(--border) 72%, transparent);
+    background: color-mix(in srgb, var(--background) 72%, transparent);
+    box-shadow:
+      0 18px 60px rgba(0, 0, 0, 0.26),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+
+  .glass-panel::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.08) 34%, transparent 62%, rgba(255, 255, 255, 0.12) 88%, transparent);
+    opacity: 0.7;
+  }
+
+  .glass-panel::after {
+    content: "";
+    position: absolute;
+    inset: -24%;
+    pointer-events: none;
+    z-index: 0;
+    background-image:
+      radial-gradient(circle at 12% 18%, rgba(255, 255, 255, 0.14) 0 1px, transparent 1.6px),
+      radial-gradient(circle at 84% 6%, rgba(255, 255, 255, 0.12) 0 1px, transparent 1.4px),
+      radial-gradient(circle at 58% 74%, rgba(255, 255, 255, 0.08) 0 1px, transparent 1.4px);
+    background-size: 3px 3px;
+    mix-blend-mode: soft-light;
+    opacity: 0.18;
+  }
+
+  .glass-panel > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  .glass-panel--soft {
+    background: color-mix(in srgb, var(--card) 60%, transparent);
+  }
+
+  .glass-panel--strong {
+    background: color-mix(in srgb, var(--card) 84%, transparent);
+  }
+
+  .glass-panel--floating {
+    border-radius: 1.25rem;
   }
 }
 
@@ -99,23 +161,23 @@
     "Liberation Mono", Menlo, monospace;
   --font-chat-code-family: var(--font-mono-family);
   --terminal-font-family: "JetBrainsMono NFM", "JetBrainsMono NF", "JetBrains Mono", monospace;
-  --background: var(--color-white);
+  --background: color-mix(in srgb, var(--color-white) 94%, transparent);
   --foreground: var(--color-neutral-800);
-  --card: var(--color-white);
+  --card: color-mix(in srgb, var(--color-white) 72%, transparent);
   --card-foreground: var(--color-neutral-800);
-  --popover: var(--color-white);
+  --popover: color-mix(in srgb, var(--color-white) 68%, transparent);
   --popover-foreground: var(--color-neutral-800);
   --primary: var(--color-neutral-900);
   --primary-foreground: var(--color-white);
-  --secondary: --alpha(var(--color-black) / 4%);
+  --secondary: --alpha(var(--color-black) / 6%);
   --secondary-foreground: var(--color-neutral-800);
-  --muted: --alpha(var(--color-black) / 4%);
+  --muted: --alpha(var(--color-black) / 6%);
   --muted-foreground: color-mix(in srgb, var(--color-neutral-500) 90%, var(--color-black));
-  --accent: --alpha(var(--color-black) / 4%);
+  --accent: --alpha(var(--color-black) / 6%);
   --accent-foreground: var(--color-neutral-800);
   --destructive: var(--color-red-500);
-  --border: --alpha(var(--color-black) / 5%);
-  --input: --alpha(var(--color-black) / 6%);
+  --border: --alpha(var(--color-black) / 8%);
+  --input: --alpha(var(--color-black) / 8%);
   --ring: var(--color-neutral-400);
   --destructive-foreground: var(--color-red-700);
   --info: var(--color-blue-500);
@@ -128,23 +190,23 @@
 
   @variant dark {
     color-scheme: dark;
-    --background: #0d0d0d;
+    --background: #090b10;
     --foreground: var(--color-neutral-100);
-    --card: color-mix(in srgb, var(--background) 99%, var(--color-white));
+    --card: color-mix(in srgb, var(--background) 74%, transparent);
     --card-foreground: var(--color-neutral-100);
-    --popover: color-mix(in srgb, var(--background) 99%, var(--color-white));
+    --popover: color-mix(in srgb, var(--background) 72%, transparent);
     --popover-foreground: var(--color-neutral-100);
     --primary: var(--color-neutral-100);
     --primary-foreground: var(--color-neutral-900);
-    --secondary: --alpha(var(--color-white) / 4%);
+    --secondary: --alpha(var(--color-white) / 6%);
     --secondary-foreground: var(--color-neutral-100);
-    --muted: --alpha(var(--color-white) / 4%);
+    --muted: --alpha(var(--color-white) / 6%);
     --muted-foreground: color-mix(in srgb, var(--color-neutral-500) 90%, var(--color-white));
-    --accent: --alpha(var(--color-white) / 4%);
+    --accent: --alpha(var(--color-white) / 6%);
     --accent-foreground: var(--color-neutral-100);
     --destructive: color-mix(in srgb, var(--color-red-500) 90%, var(--color-white));
-    --border: --alpha(var(--color-white) / 4%);
-    --input: --alpha(var(--color-white) / 5%);
+    --border: --alpha(var(--color-white) / 10%);
+    --input: --alpha(var(--color-white) / 10%);
     --ring: var(--color-neutral-500);
     --destructive-foreground: var(--color-red-400);
     --info: var(--color-blue-500);
@@ -536,4 +598,29 @@ diffs-container {
   background-clip: text;
   -webkit-background-clip: text;
   animation: ultrathink-rainbow 10s linear infinite;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+  background:
+    radial-gradient(circle at 20% 10%, color-mix(in srgb, var(--info) 20%, transparent) 0, transparent 32%),
+    radial-gradient(circle at 80% 0%, color-mix(in srgb, var(--success) 14%, transparent) 0, transparent 28%),
+    radial-gradient(circle at 50% 100%, color-mix(in srgb, var(--warning) 12%, transparent) 0, transparent 36%);
+  opacity: 0.28;
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+  background-image: radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.035) 1px, transparent 0);
+  background-size: 4px 4px;
+  opacity: 0.2;
+  mix-blend-mode: overlay;
 }

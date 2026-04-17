@@ -386,9 +386,9 @@ export default function WorkspaceView({ workspaceId }: { workspaceId: string }) 
   );
 
   return (
-    <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground">
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
-        <header className="border-b border-border px-3 sm:px-5">
+    <SidebarInset className="glass-panel overflow-hidden h-dvh min-h-0 overflow-hidden overscroll-y-none bg-background/40 text-foreground">
+      <div className="glass-panel overflow-hidden flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background/40">
+        <header className="glass-panel border-b border-border/60 bg-background/45 px-3 sm:px-5">
           <div className="flex h-[52px] items-center gap-2 sm:gap-3">
             <SidebarHeaderTrigger className="size-7 shrink-0" />
             <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -462,7 +462,7 @@ export default function WorkspaceView({ workspaceId }: { workspaceId: string }) 
             />
           ) : (
             <div className="flex h-full items-center justify-center px-6">
-              <div className="max-w-sm rounded-3xl border border-border/70 bg-card/40 p-6 text-center shadow-sm">
+              <div className="glass-panel glass-panel--soft overflow-hidden max-w-sm rounded-3xl border border-border/70 bg-card/40 p-6 text-center shadow-sm">
                 <div className="text-base font-medium text-foreground/88">
                   This workspace has no open terminals
                 </div>
