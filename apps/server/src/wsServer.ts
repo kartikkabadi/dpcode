@@ -10,13 +10,20 @@ import http from "node:http";
 import { realpathSync } from "node:fs";
 import type { Duplex } from "node:stream";
 
+import {
+  getSessionInfo as getClaudeSessionInfo,
+  getSessionMessages as getClaudeSessionMessages,
+  type SessionMessage as ClaudeSessionMessage,
+} from "@anthropic-ai/claude-agent-sdk";
 import Mime from "@effect/platform-node/Mime";
 import {
   CommandId,
   DEFAULT_TERMINAL_ID,
   DEFAULT_PROVIDER_INTERACTION_MODE,
   type ClientOrchestrationCommand,
+  MessageId,
   type OrchestrationEvent,
+  type ThreadHandoffImportedMessage,
   type OrchestrationReadModel,
   type OrchestrationShellStreamEvent,
   type OrchestrationCommand,
@@ -53,6 +60,7 @@ import OS from "node:os";
 import { WebSocketServer, type WebSocket } from "ws";
 
 import { createLogger } from "./logger";
+import { resolveThreadWorkspaceCwd } from "./checkpointing/Utils.ts";
 import { GitManager } from "./git/Services/GitManager.ts";
 import { TerminalManager } from "./terminal/Services/Manager.ts";
 import { Keybindings } from "./keybindings";
@@ -211,6 +219,159 @@ function getLatestBootstrapUserMessageTimestamp(thread: BootstrapSnapshotThread)
   }
 
   return toSortableBootstrapTimestamp(thread.updatedAt ?? thread.createdAt);
+}
+
+function mapProviderSessionStatusToOrchestrationStatus(
+  status: "connecting" | "ready" | "running" | "error" | "closed",
+): "starting" | "ready" | "running" | "error" | "stopped" {
+  switch (status) {
+    case "connecting":
+      return "starting";
+    case "running":
+      return "running";
+    case "error":
+      return "error";
+    case "closed":
+      return "stopped";
+    case "ready":
+    default:
+      return "ready";
+  }
+}
+
+function readTranscriptTextParts(value: unknown): ReadonlyArray<string> {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((part) => {
+    if (!part || typeof part !== "object") {
+      return [];
+    }
+
+    const candidate = part as {
+      readonly type?: unknown;
+      readonly text?: unknown;
+    };
+    return candidate.type === "text" && typeof candidate.text === "string" ? [candidate.text] : [];
+  });
+}
+
+function readCodexSnapshotMessageText(value: unknown): string {
+  if (!value || typeof value !== "object") {
+    return "";
+  }
+
+  const candidate = value as {
+    readonly text?: unknown;
+    readonly content?: unknown;
+  };
+
+  if (typeof candidate.text === "string") {
+    return candidate.text;
+  }
+
+  return readTranscriptTextParts(candidate.content).join("");
+}
+
+function mapCodexSnapshotMessages(input: {
+  readonly importedAt: string;
+  readonly threadId: ThreadId;
+  readonly turns: ReadonlyArray<{
+    readonly items: ReadonlyArray<unknown>;
+  }>;
+}): ReadonlyArray<ThreadHandoffImportedMessage> {
+  return input.turns.flatMap((turn, turnIndex) =>
+    turn.items.flatMap((item, itemIndex) => {
+      if (!item || typeof item !== "object") {
+        return [];
+      }
+
+      const candidate = item as {
+        readonly type?: unknown;
+        readonly content?: unknown;
+      };
+      const role =
+        candidate.type === "userMessage"
+          ? "user"
+          : candidate.type === "agentMessage"
+            ? "assistant"
+            : null;
+      if (role === null) {
+        return [];
+      }
+
+      const text = readCodexSnapshotMessageText(candidate);
+      if (text.length === 0) {
+        return [];
+      }
+
+      return [
+        {
+          messageId: MessageId.makeUnsafe(
+            `import:${String(input.threadId)}:${turnIndex}:${itemIndex}`,
+          ),
+          role,
+          text,
+          createdAt: input.importedAt,
+          updatedAt: input.importedAt,
+        },
+      ];
+    }),
+  );
+}
+
+function readClaudeSessionMessageText(value: unknown): string {
+  if (!value || typeof value !== "object") {
+    return typeof value === "string" ? value : "";
+  }
+
+  const candidate = value as {
+    readonly content?: unknown;
+    readonly text?: unknown;
+  };
+  if (typeof candidate.text === "string") {
+    return candidate.text;
+  }
+
+  if (typeof candidate.content === "string") {
+    return candidate.content;
+  }
+
+  return readTranscriptTextParts(candidate.content).join("\n\n");
+}
+
+function mapClaudeSessionMessages(input: {
+  readonly importedAt: string;
+  readonly threadId: ThreadId;
+  readonly messages: ReadonlyArray<ClaudeSessionMessage>;
+}): ReadonlyArray<ThreadHandoffImportedMessage> {
+  return input.messages.flatMap((message, messageIndex) => {
+    if (message.type !== "user" && message.type !== "assistant") {
+      return [];
+    }
+
+    const text = readClaudeSessionMessageText(message.message).trim();
+    if (text.length === 0) {
+      return [];
+    }
+
+    return [
+      {
+        messageId: MessageId.makeUnsafe(
+          `import:${String(input.threadId)}:claude:${messageIndex}:${message.uuid}`,
+        ),
+        role: message.type,
+        text,
+        createdAt: input.importedAt,
+        updatedAt: input.importedAt,
+      },
+    ];
+  });
+}
+
+function buildImportMessagesError(message: string): RouteRequestError {
+  return new RouteRequestError({ message });
 }
 
 function getMostRecentBootstrapThread(
@@ -1149,6 +1310,111 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
     Effect.all([closeAllClients, closeWebSocketServer.pipe(Effect.ignoreCause({ log: true }))]),
   );
 
+  const dispatchImportedMessages = (input: {
+    readonly createdAt: string;
+    readonly messages: ReadonlyArray<ThreadHandoffImportedMessage>;
+    readonly threadId: ThreadId;
+  }) =>
+    input.messages.length === 0
+      ? Effect.void
+      : orchestrationEngine.dispatch({
+          type: "thread.messages.import",
+          commandId: CommandId.makeUnsafe(crypto.randomUUID()),
+          threadId: input.threadId,
+          messages: input.messages,
+          createdAt: input.createdAt,
+        });
+
+  const ensureClaudeThreadImportable = Effect.fn(function* (input: {
+    readonly cwd: string | undefined;
+    readonly externalId: string;
+  }) {
+    const claudeSessionInfo = yield* Effect.tryPromise({
+      try: () => getClaudeSessionInfo(input.externalId, input.cwd ? { dir: input.cwd } : undefined),
+      catch: (cause) =>
+        buildImportMessagesError(
+          cause instanceof Error && cause.message.length > 0
+            ? cause.message
+            : "Failed to inspect Claude session metadata.",
+        ),
+    });
+
+    if (claudeSessionInfo) {
+      return;
+    }
+
+    const sessionFoundElsewhere = yield* Effect.tryPromise({
+      try: () => getClaudeSessionInfo(input.externalId),
+      catch: () => undefined,
+    });
+
+    return yield* buildImportMessagesError(
+      sessionFoundElsewhere && input.cwd
+        ? `Claude session '${input.externalId}' exists, but not for this workspace. Claude resume only works when the session file is stored for '${input.cwd}'.`
+        : `Claude session '${input.externalId}' was not found on this machine for this workspace. Claude import only works with a locally persisted Claude session ID.`,
+    );
+  });
+
+  const importCodexThreadHistory = Effect.fn(function* (input: {
+    readonly importedAt: string;
+    readonly threadId: ThreadId;
+  }) {
+    const adapter = yield* providerAdapterRegistry.getByProvider("codex");
+    const snapshot = yield* adapter
+      .readThread(input.threadId)
+      .pipe(
+        Effect.mapError((cause) =>
+          buildImportMessagesError(
+            cause instanceof Error && cause.message.length > 0
+              ? cause.message
+              : "Failed to read Codex thread history.",
+          ),
+        ),
+      );
+
+    const importedMessages = mapCodexSnapshotMessages({
+      threadId: input.threadId,
+      turns: snapshot.turns,
+      importedAt: input.importedAt,
+    });
+
+    yield* dispatchImportedMessages({
+      threadId: input.threadId,
+      messages: importedMessages,
+      createdAt: input.importedAt,
+    });
+  });
+
+  const importClaudeThreadHistory = Effect.fn(function* (input: {
+    readonly cwd: string | undefined;
+    readonly externalId: string;
+    readonly importedAt: string;
+    readonly threadId: ThreadId;
+  }) {
+    const sessionMessages = yield* Effect.tryPromise({
+      try: () =>
+        getClaudeSessionMessages(input.externalId, input.cwd ? { dir: input.cwd } : undefined),
+      catch: (cause) =>
+        buildImportMessagesError(
+          cause instanceof Error && cause.message.length > 0
+            ? cause.message
+            : "Failed to read Claude session history.",
+        ),
+    });
+
+    const importedMessages = mapClaudeSessionMessages({
+      threadId: input.threadId,
+      messages: sessionMessages,
+      importedAt: input.importedAt,
+    });
+
+    yield* dispatchImportedMessages({
+      threadId: input.threadId,
+      messages: importedMessages,
+      createdAt: input.importedAt,
+    });
+  });
+
   const routeRequest = Effect.fnUntraced(function* (ws: WebSocket, request: WebSocketRequest) {
     switch (request.body._tag) {
       case ORCHESTRATION_WS_METHODS.getSnapshot:
@@ -1163,6 +1429,83 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
         const { command } = request.body;
         const normalizedCommand = yield* normalizeDispatchCommand({ command });
         return yield* orchestrationEngine.dispatch(normalizedCommand);
+      }
+
+      case ORCHESTRATION_WS_METHODS.importThread: {
+        const body = request.body;
+        if (body._tag !== ORCHESTRATION_WS_METHODS.importThread) {
+          return undefined;
+        }
+        const readModel = yield* orchestrationEngine.getReadModel();
+        const thread = readModel.threads.find((entry) => entry.id === body.threadId);
+        if (!thread || thread.deletedAt !== null) {
+          return yield* new RouteRequestError({
+            message: `Thread '${body.threadId}' was not found.`,
+          });
+        }
+
+        if (thread.session && thread.session.status !== "stopped") {
+          return yield* new RouteRequestError({
+            message: `Thread '${body.threadId}' already has an active provider session.`,
+          });
+        }
+
+        const cwd = resolveThreadWorkspaceCwd({
+          thread,
+          projects: readModel.projects,
+        });
+        const externalId = body.externalId.trim();
+
+        if (thread.modelSelection.provider === "claudeAgent") {
+          yield* ensureClaudeThreadImportable({
+            cwd,
+            externalId,
+          });
+        }
+
+        const session = yield* providerService.startSession(thread.id, {
+          threadId: thread.id,
+          provider: thread.modelSelection.provider,
+          ...(cwd ? { cwd } : {}),
+          modelSelection: thread.modelSelection,
+          resumeCursor:
+            thread.modelSelection.provider === "claudeAgent"
+              ? { resume: externalId }
+              : { threadId: externalId },
+          runtimeMode: thread.runtimeMode,
+        });
+
+        if (thread.modelSelection.provider === "codex") {
+          yield* importCodexThreadHistory({
+            threadId: thread.id,
+            importedAt: session.updatedAt,
+          });
+        } else if (thread.modelSelection.provider === "claudeAgent") {
+          yield* importClaudeThreadHistory({
+            threadId: thread.id,
+            externalId,
+            cwd,
+            importedAt: session.updatedAt,
+          });
+        }
+
+        yield* orchestrationEngine.dispatch({
+          type: "thread.session.set",
+          commandId: CommandId.makeUnsafe(crypto.randomUUID()),
+          threadId: thread.id,
+          session: {
+            threadId: thread.id,
+            status: mapProviderSessionStatusToOrchestrationStatus(session.status),
+            providerName: session.provider,
+            runtimeMode: thread.runtimeMode,
+            activeTurnId: null,
+            lastError: session.lastError ?? null,
+            updatedAt: session.updatedAt,
+          },
+          createdAt: session.updatedAt,
+        });
+
+        return { threadId: thread.id };
       }
 
       case ORCHESTRATION_WS_METHODS.getTurnDiff: {

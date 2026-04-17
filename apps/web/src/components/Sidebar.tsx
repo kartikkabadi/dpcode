@@ -70,7 +70,7 @@ import {
 import { isElectron } from "../env";
 import { APP_VERSION } from "../branding";
 import { showConfirmDialogFallback } from "../confirmDialogFallback";
-import { isMacPlatform, newCommandId, newProjectId } from "../lib/utils";
+import { isMacPlatform, newCommandId, newProjectId, newThreadId } from "../lib/utils";
 import { persistAppStateNow, useStore } from "../store";
 import { getThreadFromState, getThreadsFromState } from "../threadDerivation";
 import {
@@ -882,6 +882,7 @@ export default function Sidebar() {
   const [addingProject, setAddingProject] = useState(false);
   const [newCwd, setNewCwd] = useState("");
   const [searchPaletteOpen, setSearchPaletteOpen] = useState(false);
+  const [searchPaletteMode, setSearchPaletteMode] = useState<"search" | "import">("search");
   const [isPickingFolder, setIsPickingFolder] = useState(false);
   const [showManualPathInput, setShowManualPathInput] = useState(false);
   const [isAddingProject, setIsAddingProject] = useState(false);
@@ -1553,6 +1554,86 @@ export default function Sidebar() {
     projects,
     routeThreadSummary,
   ]);
+
+  const handleImportThread = useCallback(
+    async (provider: ProviderKind, externalId: string) => {
+      const api = readNativeApi();
+      if (!api) {
+        throw new Error("The app server is unavailable.");
+      }
+
+      const activeProjectId = routeThreadSummary?.projectId ?? projects[0]?.id ?? null;
+      if (!activeProjectId) {
+        throw new Error("Add a project before importing a thread.");
+      }
+
+      const activeProject = projects.find((project) => project.id === activeProjectId);
+      if (!activeProject) {
+        throw new Error("The target project could not be resolved.");
+      }
+
+      const modelSelection =
+        activeProject.defaultModelSelection?.provider === provider
+          ? activeProject.defaultModelSelection
+          : {
+              provider,
+              model: DEFAULT_MODEL_BY_PROVIDER[provider],
+            };
+      const threadId = newThreadId();
+      const createdAt = new Date().toISOString();
+      const trimmedExternalId = externalId.trim();
+      const suffix = trimmedExternalId.slice(-8);
+      const title =
+        provider === "claudeAgent"
+          ? `Imported Claude session${suffix ? ` ${suffix}` : ""}`
+          : provider === "gemini"
+            ? `Imported Gemini thread${suffix ? ` ${suffix}` : ""}`
+            : `Imported Codex thread${suffix ? ` ${suffix}` : ""}`;
+      let createdThread = false;
+
+      try {
+        await api.orchestration.dispatchCommand({
+          type: "thread.create",
+          commandId: newCommandId(),
+          threadId,
+          projectId: activeProject.id,
+          title,
+          modelSelection,
+          runtimeMode: "full-access",
+          interactionMode: "default",
+          envMode: resolveSidebarNewThreadEnvMode({
+            defaultEnvMode: appSettings.defaultThreadEnvMode,
+          }),
+          branch: null,
+          worktreePath: null,
+          createdAt,
+        });
+        createdThread = true;
+
+        await api.orchestration.importThread({
+          threadId,
+          externalId: trimmedExternalId,
+        });
+
+        await navigate({
+          to: "/$threadId",
+          params: { threadId },
+        });
+      } catch (error) {
+        if (createdThread) {
+          await api.orchestration
+            .dispatchCommand({
+              type: "thread.delete",
+              commandId: newCommandId(),
+              threadId,
+            })
+            .catch(() => undefined);
+        }
+        throw error;
+      }
+    },
+    [appSettings.defaultThreadEnvMode, navigate, projects, routeThreadSummary],
+  );
 
   const cancelRename = useCallback(() => {
     setRenamingThreadId(null);
@@ -3742,7 +3823,8 @@ export default function Sidebar() {
       ) {
         event.preventDefault();
         event.stopPropagation();
-        setSearchPaletteOpen((prev) => !prev);
+        setSearchPaletteMode("search");
+        setSearchPaletteOpen((prev) => !prev || searchPaletteMode !== "search");
         return;
       }
 
@@ -3779,7 +3861,15 @@ export default function Sidebar() {
       if (command === "sidebar.search") {
         event.preventDefault();
         event.stopPropagation();
-        setSearchPaletteOpen((prev) => !prev);
+        setSearchPaletteMode("search");
+        setSearchPaletteOpen((prev) => !prev || searchPaletteMode !== "search");
+        return;
+      }
+      if (command === "sidebar.importThread") {
+        event.preventDefault();
+        event.stopPropagation();
+        setSearchPaletteMode("import");
+        setSearchPaletteOpen((prev) => !prev || searchPaletteMode !== "import");
         return;
       }
       const jumpIndex = threadJumpIndexFromCommand(command ?? "");
@@ -3851,6 +3941,7 @@ export default function Sidebar() {
     handleStartAddProject,
     keybindings,
     getCurrentSidebarShortcutContext,
+    searchPaletteMode,
     threadJumpCommandByThreadId,
     threadJumpThreadIds,
     visibleSidebarThreadIds,
@@ -3935,6 +4026,9 @@ export default function Sidebar() {
   const searchShortcutLabel =
     shortcutLabelForCommand(keybindings, "sidebar.search") ??
     (isMacPlatform(navigator.platform) ? "⌘K" : "Ctrl+K");
+  const importThreadShortcutLabel =
+    shortcutLabelForCommand(keybindings, "sidebar.importThread") ??
+    (isMacPlatform(navigator.platform) ? "⌘I" : "Ctrl+I");
   const searchPaletteProjects = useMemo<SidebarSearchProject[]>(
     () =>
       projects.map((project) => ({
@@ -3965,13 +4059,20 @@ export default function Sidebar() {
         keywords: ["folder", "repo", "repository", "open"],
       },
       {
+        id: "import-thread",
+        label: "Import thread from...",
+        description: "Attach a local thread to an existing Codex or Claude session.",
+        keywords: ["import", "resume", "thread", "session", "codex", "claude"],
+        shortcutLabel: importThreadShortcutLabel,
+      },
+      {
         id: "settings",
         label: "Settings",
         description: "Open app settings.",
         keywords: ["preferences", "config"],
       },
     ],
-    [newThreadShortcutLabel],
+    [importThreadShortcutLabel, newThreadShortcutLabel],
   );
 
   const handleDesktopUpdateButtonClick = useCallback(() => {
@@ -4678,7 +4779,14 @@ export default function Sidebar() {
       {searchPaletteOpen ? (
         <SidebarSearchPaletteController
           open={searchPaletteOpen}
-          onOpenChange={setSearchPaletteOpen}
+          mode={searchPaletteMode}
+          onModeChange={setSearchPaletteMode}
+          onOpenChange={(open) => {
+            setSearchPaletteOpen(open);
+            if (!open) {
+              setSearchPaletteMode("search");
+            }
+          }}
           actions={searchPaletteActions}
           projects={searchPaletteProjects}
           projectById={projectById}
@@ -4688,6 +4796,7 @@ export default function Sidebar() {
             void navigate({ to: "/settings" });
           }}
           onOpenProject={handleOpenProjectFromSearch}
+          onImportThread={handleImportThread}
           onOpenThread={(threadId) => {
             activateThread(ThreadId.makeUnsafe(threadId));
           }}
@@ -4699,6 +4808,8 @@ export default function Sidebar() {
 
 function SidebarSearchPaletteController(props: {
   open: boolean;
+  mode: "search" | "import";
+  onModeChange: (mode: "search" | "import") => void;
   onOpenChange: (open: boolean) => void;
   actions: readonly SidebarSearchAction[];
   projects: readonly SidebarSearchProject[];
@@ -4707,31 +4818,45 @@ function SidebarSearchPaletteController(props: {
   onAddProject: () => void;
   onOpenSettings: () => void;
   onOpenProject: (projectId: string) => void;
+  onImportThread: (provider: ProviderKind, externalId: string) => Promise<void>;
   onOpenThread: (threadId: string) => void;
 }) {
   const selectAllThreads = useMemo(() => createAllThreadsSelector(), []);
+  const selectSidebarDisplayThreads = useMemo(() => createSidebarDisplayThreadsSelector(), []);
   const threads = useStore(selectAllThreads);
-  const searchPaletteThreads = useMemo<SidebarSearchThread[]>(
-    () =>
-      threads.map((thread) => ({
-        id: thread.id,
-        title: thread.title,
-        projectId: thread.projectId,
-        projectName: props.projectById.get(thread.projectId)?.name ?? "Unknown project",
-        projectRemoteName: props.projectById.get(thread.projectId)?.remoteName ?? "Unknown project",
-        provider: thread.modelSelection.provider,
-        createdAt: thread.createdAt,
-        updatedAt: thread.updatedAt,
-        messages: thread.messages.map((message) => ({
-          text: message.text,
-        })),
-      })),
-    [props.projectById, threads],
-  );
+  const sidebarDisplayThreads = useStore(selectSidebarDisplayThreads);
+  const searchPaletteThreads = useMemo<SidebarSearchThread[]>(() => {
+    const threadById = new Map(threads.map((thread) => [thread.id, thread] as const));
+    return sidebarDisplayThreads.flatMap((threadSummary) => {
+      const thread = threadById.get(threadSummary.id);
+      if (!thread) {
+        return [];
+      }
+
+      return [
+        {
+          id: thread.id,
+          title: thread.title,
+          projectId: thread.projectId,
+          projectName: props.projectById.get(thread.projectId)?.name ?? "Unknown project",
+          projectRemoteName:
+            props.projectById.get(thread.projectId)?.remoteName ?? "Unknown project",
+          provider: thread.modelSelection.provider,
+          createdAt: thread.createdAt,
+          updatedAt: thread.updatedAt,
+          messages: thread.messages.map((message) => ({
+            text: message.text,
+          })),
+        },
+      ];
+    });
+  }, [props.projectById, sidebarDisplayThreads, threads]);
 
   return (
     <SidebarSearchPalette
       open={props.open}
+      mode={props.mode}
+      onModeChange={props.onModeChange}
       onOpenChange={props.onOpenChange}
       actions={props.actions}
       projects={props.projects}
@@ -4740,6 +4865,7 @@ function SidebarSearchPaletteController(props: {
       onAddProject={props.onAddProject}
       onOpenSettings={props.onOpenSettings}
       onOpenProject={props.onOpenProject}
+      onImportThread={props.onImportThread}
       onOpenThread={props.onOpenThread}
     />
   );
