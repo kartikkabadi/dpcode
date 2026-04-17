@@ -43,6 +43,7 @@ interface LiquidGlassNativeBindings {
   setVariant(id: number, variant: GlassMaterialVariant): void;
   setScrimState(id: number, scrim: number): void;
   setSubduedState(id: number, subdued: number): void;
+  clearViews(): void;
 }
 
 interface NativeAddonModule {
@@ -132,6 +133,10 @@ export class LiquidGlass {
 
   unstable_setSubdued(id: number, subdued: number): void {
     this.addon?.setSubduedState?.(id, subdued);
+  }
+
+  clearViews(): void {
+    this.addon?.clearViews?.();
   }
 }
 

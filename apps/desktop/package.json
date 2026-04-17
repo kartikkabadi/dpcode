@@ -4,11 +4,11 @@
   "private": true,
   "main": "dist-electron/main.js",
   "scripts": {
-    "dev": "bun run scripts/dev.mjs",
+    "dev": "bun run build:native && bun run scripts/dev.mjs",
     "dev:bundle": "tsdown --watch",
     "dev:electron": "bun run scripts/dev-electron.mjs",
     "build": "tsdown",
-    "start": "bun run scripts/start-electron.mjs",
+    "start": "bun run build:native && bun run scripts/start-electron.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
     "smoke-test": "node scripts/smoke-test.mjs",

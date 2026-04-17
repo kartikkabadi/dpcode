@@ -6,6 +6,7 @@ extern "C" int AddGlassEffectView(unsigned char *buffer, bool opaque);
 extern "C" void ConfigureGlassView(int viewId, double cornerRadius, const char *tintHex);
 extern "C" void SetGlassViewIntProperty(int viewId, const char *key, long long value);
 extern "C" void SetGlassViewStringProperty(int viewId, const char *key, const char *value);
+extern "C" void ClearGlassViews();
 #endif
 
 class LiquidGlassNative : public Napi::ObjectWrap<LiquidGlassNative>
@@ -21,6 +22,7 @@ public:
         InstanceMethod("setVariant", &LiquidGlassNative::SetVariant),
         InstanceMethod("setScrimState", &LiquidGlassNative::SetScrimState),
         InstanceMethod("setSubduedState", &LiquidGlassNative::SetSubduedState),
+        InstanceMethod("clearViews", &LiquidGlassNative::ClearViews),
       }
     );
 
@@ -119,6 +121,15 @@ private:
     int id = info[0].As<Napi::Number>().Int32Value();
     long long subdued = info[1].As<Napi::Number>().Int64Value();
     ApplyIntProp(id, "subduedState", subdued);
+    return env.Undefined();
+  }
+
+  Napi::Value ClearViews(const Napi::CallbackInfo &info)
+  {
+    Napi::Env env = info.Env();
+#ifdef __APPLE__
+    ClearGlassViews();
+#endif
     return env.Undefined();
   }
 

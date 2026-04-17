@@ -3,6 +3,7 @@
 #import <objc/runtime.h>
 #import <objc/message.h>
 #include <string>
+#include <cstring>
 #include <cctype>
 
 #ifdef PLATFORM_OSX
@@ -46,6 +47,12 @@ static NSColor* ColorFromHexNSString(NSString* hex)
     dispatch_sync(dispatch_get_main_queue(), block);        \
   }
 
+extern "C" void ClearGlassViews() {
+  RUN_ON_MAIN(^{
+    g_glassViews.clear();
+  });
+}
+
 extern "C" int AddGlassEffectView(unsigned char *buffer, bool opaque) {
   if (!buffer) {
     return -1;
@@ -54,7 +61,8 @@ extern "C" int AddGlassEffectView(unsigned char *buffer, bool opaque) {
   __block int resultId = -1;
 
   RUN_ON_MAIN(^{
-    NSView *rootView = *reinterpret_cast<NSView **>(buffer);
+    NSView *rootView = nil;
+    memcpy(&rootView, buffer, sizeof(rootView));
     if (!rootView) return;
 
     NSView *container = rootView;

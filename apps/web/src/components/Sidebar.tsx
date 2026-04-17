@@ -4540,7 +4540,7 @@ export default function Sidebar() {
 
       <SidebarContent className="gap-0 font-system-ui">
         {showArm64IntelBuildWarning && arm64IntelBuildWarningDescription ? (
-          <SidebarGroup className="px-2 pt-2 pb-0">
+          <SidebarGroup className="glass-panel--soft px-2 pt-2 pb-0">
             <Alert variant="warning" className="rounded-2xl border-warning/40 bg-warning/8">
               <TriangleAlertIcon />
               <AlertTitle>Intel build on Apple Silicon</AlertTitle>
@@ -4672,7 +4672,7 @@ export default function Sidebar() {
             </SidebarGroup>
 
             {isOnWorkspace ? (
-              <SidebarGroup className="px-1.5 pt-1 pb-1.5">
+              <SidebarGroup className="glass-panel--soft px-1.5 pt-1 pb-1.5">
                 <div className="my-2 h-px w-full bg-border" />
                 <div className="mb-1.5 flex items-center px-2">
                   <span className="text-[length:var(--app-font-size-ui,12px)] font-normal tracking-tight text-muted-foreground/58">
@@ -4786,7 +4786,7 @@ export default function Sidebar() {
                 </DndContext>
               </SidebarGroup>
             ) : (
-              <SidebarGroup className="px-1.5 py-1.5">
+              <SidebarGroup className="glass-panel--soft px-1.5 py-1.5">
                 {pinnedThreads.length > 0 ? (
                   <>
                     <div className="flex flex-col gap-0.5">

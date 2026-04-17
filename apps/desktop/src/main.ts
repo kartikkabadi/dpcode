@@ -1608,6 +1608,7 @@ function createWindow(): BrowserWindow {
   }
 
   window.on("closed", () => {
+    liquidGlass.clearViews();
     if (mainWindow === window) {
       mainWindow = null;
     }
