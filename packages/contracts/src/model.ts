@@ -61,6 +61,16 @@ export type ModelCapabilities = {
   readonly promptInjectedEffortLevels: readonly string[];
 };
 
+const GEMINI_2_5_CAPABILITIES: ModelCapabilities = {
+  reasoningEffortLevels: [
+    { value: "-1", label: "Dynamic", isDefault: true },
+    { value: "512", label: "512 Tokens" },
+  ],
+  supportsFastMode: false,
+  supportsThinkingToggle: false,
+  promptInjectedEffortLevels: [],
+};
+
 type ModelDefinition = {
   readonly slug: string;
   readonly name: string;
@@ -256,16 +266,7 @@ export const MODEL_OPTIONS_BY_PROVIDER = {
     {
       slug: "auto-gemini-2.5",
       name: "Auto Gemini 2.5",
-      capabilities: {
-        reasoningEffortLevels: [
-          { value: "-1", label: "Dynamic", isDefault: true },
-          { value: "512", label: "512 Tokens" },
-          { value: "0", label: "Off" },
-        ],
-        supportsFastMode: false,
-        supportsThinkingToggle: false,
-        promptInjectedEffortLevels: [],
-      },
+      capabilities: GEMINI_2_5_CAPABILITIES,
     },
     {
       slug: "gemini-3.1-pro-preview",
@@ -309,44 +310,17 @@ export const MODEL_OPTIONS_BY_PROVIDER = {
     {
       slug: "gemini-2.5-pro",
       name: "Gemini 2.5 Pro",
-      capabilities: {
-        reasoningEffortLevels: [
-          { value: "-1", label: "Dynamic", isDefault: true },
-          { value: "512", label: "512 Tokens" },
-          { value: "0", label: "Off" },
-        ],
-        supportsFastMode: false,
-        supportsThinkingToggle: false,
-        promptInjectedEffortLevels: [],
-      },
+      capabilities: GEMINI_2_5_CAPABILITIES,
     },
     {
       slug: "gemini-2.5-flash",
       name: "Gemini 2.5 Flash",
-      capabilities: {
-        reasoningEffortLevels: [
-          { value: "-1", label: "Dynamic", isDefault: true },
-          { value: "512", label: "512 Tokens" },
-          { value: "0", label: "Off" },
-        ],
-        supportsFastMode: false,
-        supportsThinkingToggle: false,
-        promptInjectedEffortLevels: [],
-      },
+      capabilities: GEMINI_2_5_CAPABILITIES,
     },
     {
       slug: "gemini-2.5-flash-lite",
       name: "Gemini 2.5 Flash Lite",
-      capabilities: {
-        reasoningEffortLevels: [
-          { value: "-1", label: "Dynamic", isDefault: true },
-          { value: "512", label: "512 Tokens" },
-          { value: "0", label: "Off" },
-        ],
-        supportsFastMode: false,
-        supportsThinkingToggle: false,
-        promptInjectedEffortLevels: [],
-      },
+      capabilities: GEMINI_2_5_CAPABILITIES,
     },
   ],
 } as const satisfies Record<ProviderKind, readonly ModelDefinition[]>;
