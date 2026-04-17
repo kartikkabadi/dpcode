@@ -14,7 +14,7 @@ describe("terminalThreadTitle", () => {
   });
 
   it("derives CLI-focused labels from submitted commands", () => {
-    expect(deriveTerminalThreadTitleFromCommand("codex --model gpt-5.4")).toBe("Codex CLI");
+    expect(deriveTerminalThreadTitleFromCommand("codex --model gpt-5.4")).toBe("OpenAI CLI");
     expect(deriveTerminalThreadTitleFromCommand("claude code")).toBe("Claude Code");
     expect(deriveTerminalThreadTitleFromCommand("git push origin main")).toBe("git push");
     expect(deriveTerminalThreadTitleFromCommand("npm run dev -- --token secret")).toBe(
@@ -45,7 +45,7 @@ describe("terminalThreadTitle", () => {
         terminalId: "default",
         threadId: "thread-1",
       }),
-    ).toBe("Codex CLI");
+    ).toBe("OpenAI CLI");
     expect(
       tracker.consumeWrite({
         currentTitle: "Manual rename",

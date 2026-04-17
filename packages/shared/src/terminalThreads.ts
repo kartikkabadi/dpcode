@@ -43,9 +43,13 @@ const MAX_TERMINAL_TITLE_LENGTH = 48;
 const WRAPPER_COMMANDS = new Set(["builtin", "command", "env", "noglob", "nocorrect", "sudo"]);
 const CODEX_COMMAND_NAMES = new Set(["codex", "codex-cli"]);
 const CLAUDE_COMMAND_NAMES = new Set(["claude", "claude-code", "claude_code"]);
-const OUTPUT_CODEX_TEXT_PATTERNS = [/\bopenai codex\b(?:\s*\(|\s+v)/i, /\bcodex cli\b/i];
+const OUTPUT_CODEX_TEXT_PATTERNS = [
+  /\bopenai codex\b(?:\s*\(|\s+v)/i,
+  /\bcodex cli\b/i,
+  /\bopenai cli\b/i,
+];
 const OUTPUT_CLAUDE_TEXT_PATTERNS = [/\bclaude code\b(?:\s+v\d|\s*$)/i];
-const TITLE_CODEX_TEXT_PATTERNS = [/\bopenai codex\b/i, /\bcodex cli\b/i];
+const TITLE_CODEX_TEXT_PATTERNS = [/\bopenai codex\b/i, /\bcodex cli\b/i, /\bopenai cli\b/i];
 const TITLE_CLAUDE_TEXT_PATTERNS = [/\bclaude code\b/i];
 const PROCESS_CODEX_TEXT_PATTERNS = [/@openai\/codex/i];
 const PROCESS_CLAUDE_TEXT_PATTERNS = [/@anthropic-ai\/claude-code/i, /anthropic\/claude-code/i];
@@ -274,7 +278,7 @@ function createTerminalCommandIdentity(
 }
 
 export function defaultTerminalTitleForCliKind(cliKind: TerminalCliKind): string {
-  return cliKind === "codex" ? "Codex CLI" : "Claude Code";
+  return cliKind === "codex" ? "OpenAI CLI" : "Claude Code";
 }
 
 export function managedTerminalCommandNameForCliKind(cliKind: TerminalCliKind): string {
@@ -311,7 +315,7 @@ function inferCliKindFromTitle(title: string | null | undefined): TerminalCliKin
   if (!normalizedTitle) {
     return null;
   }
-  if (/^codex(?: cli)?(?: \d+)?$/.test(normalizedTitle)) {
+  if (/^(?:codex|openai)(?: cli)?(?: \d+)?$/.test(normalizedTitle)) {
     return "codex";
   }
   if (/^claude(?: code)?(?: \d+)?$/.test(normalizedTitle) || normalizedTitle === "claude-code") {
@@ -356,7 +360,7 @@ export function deriveTerminalCommandIdentity(command: string): TerminalCommandI
   }
   const detectedCliKind = deriveCliKindFromTokenList(tokens);
   if (detectedCliKind === "codex") {
-    return createTerminalCommandIdentity("Codex CLI", "codex");
+    return createTerminalCommandIdentity("OpenAI CLI", "codex");
   }
   if (detectedCliKind === "claude" || (first === "claude" && second === "code")) {
     return createTerminalCommandIdentity("Claude Code", "claude");

@@ -132,7 +132,7 @@ it.layer(NodeServices.layer)("ProviderHealth", (it) => {
         assert.strictEqual(status.status, "error");
         assert.strictEqual(status.available, false);
         assert.strictEqual(status.authStatus, "unknown");
-        assert.strictEqual(status.message, "Codex CLI (`codex`) is not installed or not on PATH.");
+        assert.strictEqual(status.message, "OpenAI CLI (`codex`) is not installed or not on PATH.");
       }).pipe(Effect.provide(failingSpawnerLayer("spawn codex ENOENT"))),
     );
 
@@ -146,7 +146,7 @@ it.layer(NodeServices.layer)("ProviderHealth", (it) => {
         assert.strictEqual(status.authStatus, "unknown");
         assert.strictEqual(
           status.message,
-          "Codex CLI v0.36.0 is too old for DP Code. Upgrade to v0.37.0 or newer and restart DP Code.",
+          "OpenAI CLI (`codex`) v0.36.0 is too old for DP Code. Upgrade to v0.37.0 or newer and restart DP Code.",
         );
       }).pipe(
         Effect.provide(
@@ -169,7 +169,7 @@ it.layer(NodeServices.layer)("ProviderHealth", (it) => {
         assert.strictEqual(status.authStatus, "unauthenticated");
         assert.strictEqual(
           status.message,
-          "Codex CLI is not authenticated. Run `codex login` and try again.",
+          "OpenAI CLI (`codex`) is not authenticated. Run `codex login` and try again.",
         );
       }).pipe(
         Effect.provide(
@@ -195,7 +195,7 @@ it.layer(NodeServices.layer)("ProviderHealth", (it) => {
         assert.strictEqual(status.authStatus, "unauthenticated");
         assert.strictEqual(
           status.message,
-          "Codex CLI is not authenticated. Run `codex login` and try again.",
+          "OpenAI CLI (`codex`) is not authenticated. Run `codex login` and try again.",
         );
       }).pipe(
         Effect.provide(
@@ -220,7 +220,7 @@ it.layer(NodeServices.layer)("ProviderHealth", (it) => {
         assert.strictEqual(status.authStatus, "unknown");
         assert.strictEqual(
           status.message,
-          "Codex CLI authentication status command is unavailable in this Codex version.",
+          "OpenAI CLI authentication status command is unavailable in this installed CLI version.",
         );
       }).pipe(
         Effect.provide(
@@ -258,7 +258,7 @@ it.layer(NodeServices.layer)("ProviderHealth", (it) => {
         assert.strictEqual(status.authStatus, "unknown");
         assert.strictEqual(
           status.message,
-          "Using a custom Codex model provider; OpenAI login check skipped.",
+          "Using a custom model provider; OpenAI login check skipped.",
         );
       }).pipe(
         Effect.provide(

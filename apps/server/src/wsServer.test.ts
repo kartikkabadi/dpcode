@@ -1209,7 +1209,7 @@ describe("WebSocket Server", () => {
         available: true,
         authStatus: "unknown",
         checkedAt: "2026-01-01T00:10:00.000Z",
-        message: "Could not verify Codex authentication status.",
+        message: "Could not verify OpenAI authentication status.",
       },
     ];
 

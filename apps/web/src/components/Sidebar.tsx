@@ -53,6 +53,7 @@ import {
   type OrchestrationReadModel,
   PROVIDER_DISPLAY_NAMES,
   ProjectId,
+  type ProviderKind,
   ThreadId,
   type GitStatusResult,
   type ResolvedKeybindingsConfig,
@@ -94,7 +95,7 @@ import { useComposerDraftStore } from "../composerDraftStore";
 import { resolveThreadEnvironmentPresentation } from "../lib/threadEnvironment";
 import { type SidebarThreadSummary, type Thread } from "../types";
 import { shouldRenderTerminalWorkspace } from "./ChatView.logic";
-import { ClaudeAI, OpenAI } from "./Icons";
+import { ClaudeAI, Gemini, OpenAI } from "./Icons";
 import { ProjectSidebarIcon } from "./ProjectSidebarIcon";
 import { ThreadPinToggleButton } from "./ThreadPinToggleButton";
 import { ThreadRunningSpinner } from "./ThreadRunningSpinner";
@@ -165,7 +166,7 @@ import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import { cn } from "~/lib/utils";
 import {
   canCreateThreadHandoff,
-  resolveHandoffTargetProvider,
+  resolveAvailableHandoffTargetProviders,
   resolveThreadHandoffBadgeLabel,
 } from "../lib/threadHandoff";
 import { isTerminalFocused } from "../lib/terminalFocus";
@@ -280,15 +281,12 @@ function buildThreadJumpLabelMap(input: {
   return mapping.size > 0 ? mapping : EMPTY_THREAD_JUMP_LABELS;
 }
 
-function ProviderGlyph({
-  provider,
-  className,
-}: {
-  provider: "codex" | "claudeAgent";
-  className?: string;
-}) {
+function ProviderGlyph({ provider, className }: { provider: ProviderKind; className?: string }) {
   if (provider === "claudeAgent") {
     return <ClaudeAI aria-hidden="true" className={cn("text-foreground", className)} />;
+  }
+  if (provider === "gemini") {
+    return <Gemini aria-hidden="true" className={cn("text-foreground", className)} />;
   }
   return <OpenAI aria-hidden="true" className={cn("text-muted-foreground/60", className)} />;
 }
@@ -297,8 +295,8 @@ function HandoffProviderGlyph({
   sourceProvider,
   targetProvider,
 }: {
-  sourceProvider: "codex" | "claudeAgent";
-  targetProvider: "codex" | "claudeAgent";
+  sourceProvider: ProviderKind;
+  targetProvider: ProviderKind;
 }) {
   return (
     <div className="relative h-4.5 w-5 shrink-0">
@@ -384,7 +382,7 @@ function resolveThreadRowMetaBadge(input: {
 
 type SidebarSplitPreview = {
   title: string;
-  provider: "codex" | "claudeAgent";
+  provider: ProviderKind;
   threadId: ThreadId | null;
 };
 
@@ -1558,7 +1556,7 @@ export default function Sidebar() {
   ]);
 
   const handleImportThread = useCallback(
-    async (provider: "codex" | "claudeAgent", externalId: string) => {
+    async (provider: ProviderKind, externalId: string) => {
       const api = readNativeApi();
       if (!api) {
         throw new Error("The app server is unavailable.");
@@ -1588,7 +1586,9 @@ export default function Sidebar() {
       const title =
         provider === "claudeAgent"
           ? `Imported Claude session${suffix ? ` ${suffix}` : ""}`
-          : `Imported Codex thread${suffix ? ` ${suffix}` : ""}`;
+          : provider === "gemini"
+            ? `Imported Gemini thread${suffix ? ` ${suffix}` : ""}`
+            : `Imported Codex thread${suffix ? ` ${suffix}` : ""}`;
       let createdThread = false;
 
       try {
@@ -1876,9 +1876,9 @@ export default function Sidebar() {
     },
   });
   const handoffThread = useCallback(
-    async (thread: Thread) => {
+    async (thread: Thread, targetProvider: ProviderKind) => {
       try {
-        await createThreadHandoff(thread);
+        await createThreadHandoff(thread, targetProvider);
       } catch (error) {
         toastManager.add({
           type: "error",
@@ -2021,9 +2021,13 @@ export default function Sidebar() {
         hasPendingApprovals,
         hasPendingUserInput,
       });
-      const handoffLabel = canHandoff
-        ? `Handoff to ${PROVIDER_DISPLAY_NAMES[resolveHandoffTargetProvider(thread.modelSelection.provider)]}`
-        : null;
+      const handoffTargets = canHandoff
+        ? resolveAvailableHandoffTargetProviders(thread.modelSelection.provider)
+        : [];
+      const handoffItems = handoffTargets.map((provider) => ({
+        id: `handoff:${provider}`,
+        label: `Handoff to ${PROVIDER_DISPLAY_NAMES[provider]}`,
+      }));
       const threadWorkspacePath = resolveThreadWorkspaceCwd({
         projectCwd: projectCwdById.get(thread.projectId) ?? null,
         envMode: thread.envMode,
@@ -2034,7 +2038,7 @@ export default function Sidebar() {
           { id: "rename", label: "Rename thread" },
           { id: "toggle-pin", label: isPinned ? "Unpin thread" : "Pin thread" },
           { id: "mark-unread", label: "Mark unread" },
-          ...(handoffLabel ? [{ id: "handoff", label: handoffLabel }] : []),
+          ...handoffItems,
           { id: "copy-path", label: "Copy Path" },
           { id: "copy-thread-id", label: "Copy Thread ID" },
           ...(options?.extraItems ?? []),
@@ -2059,8 +2063,11 @@ export default function Sidebar() {
         markThreadUnread(threadId);
         return;
       }
-      if (clicked === "handoff") {
-        await handoffThread(thread);
+      if (typeof clicked === "string" && clicked.startsWith("handoff:")) {
+        const targetProvider = clicked.slice("handoff:".length);
+        if (handoffTargets.includes(targetProvider as ProviderKind)) {
+          await handoffThread(thread, targetProvider as ProviderKind);
+        }
         return;
       }
       if (clicked === "copy-path") {
@@ -4818,7 +4825,7 @@ function SidebarSearchPaletteController(props: {
   onAddProject: () => void;
   onOpenSettings: () => void;
   onOpenProject: (projectId: string) => void;
-  onImportThread: (provider: "codex" | "claudeAgent", externalId: string) => Promise<void>;
+  onImportThread: (provider: ProviderKind, externalId: string) => Promise<void>;
   onOpenThread: (threadId: string) => void;
 }) {
   const selectAllThreads = useMemo(() => createAllThreadsSelector(), []);

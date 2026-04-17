@@ -583,7 +583,7 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
           expect(result._tag).toBe("Left");
           if (result._tag === "Left") {
             expect(result.left).toBeInstanceOf(TextGenerationError);
-            expect(result.left.message).toContain("Codex returned invalid structured output");
+            expect(result.left.message).toContain("OpenAI CLI returned invalid structured output");
           }
         }),
       ),
@@ -616,7 +616,9 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
         expect(result._tag).toBe("Left");
         if (result._tag === "Left") {
           expect(result.left).toBeInstanceOf(TextGenerationError);
-          expect(result.left.message).toContain("Codex CLI command failed: codex execution failed");
+          expect(result.left.message).toContain(
+            "OpenAI CLI command failed: codex execution failed",
+          );
         }
       }),
     ),

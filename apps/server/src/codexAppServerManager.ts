@@ -758,7 +758,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
         "session/threadOpenRequested",
         resumeThreadId
           ? `Attempting to resume thread ${resumeThreadId}.`
-          : "Starting a new Codex thread.",
+          : "Starting a new OpenAI thread.",
       );
       await Effect.logInfo("codex app-server opening thread", {
         threadId,
@@ -782,7 +782,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
             this.emitErrorEvent(
               context,
               "session/threadResumeFailed",
-              error instanceof Error ? error.message : "Codex thread resume failed.",
+              error instanceof Error ? error.message : "OpenAI thread resume failed.",
             );
             await Effect.logWarning("codex app-server thread resume failed", {
               threadId,
@@ -830,7 +830,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
       this.emitLifecycleEvent(
         context,
         "session/threadOpenResolved",
-        `Codex ${threadOpenMethod} resolved.`,
+        `OpenAI ${threadOpenMethod} resolved.`,
       );
       await Effect.logInfo("codex app-server thread open resolved", {
         threadId,
@@ -842,7 +842,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
       this.emitLifecycleEvent(context, "session/ready", `Connected to thread ${providerThreadId}`);
       return { ...context.session };
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to start Codex session.";
+      const message = error instanceof Error ? error.message : "Failed to start OpenAI session.";
       if (context) {
         this.updateSession(context, {
           status: "error",
@@ -1260,7 +1260,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
       this.emitLifecycleEvent(
         context,
         "session/threadOpenRequested",
-        `Forking Codex thread ${sourceProviderThreadId}.`,
+        `Forking OpenAI thread ${sourceProviderThreadId}.`,
       );
       const response = await this.sendRequest(context, "thread/fork", forkParams);
       const forkedProviderThreadId = this.readThreadIdFromResponse("thread/fork", response);
@@ -1269,7 +1269,11 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
         status: "ready",
         resumeCursor: { threadId: forkedProviderThreadId },
       });
-      this.emitLifecycleEvent(context, "session/threadOpenResolved", "Codex thread/fork resolved.");
+      this.emitLifecycleEvent(
+        context,
+        "session/threadOpenResolved",
+        "OpenAI thread/fork resolved.",
+      );
       this.emitLifecycleEvent(
         context,
         "session/ready",
@@ -1283,7 +1287,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
         },
       };
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to fork Codex thread.";
+      const message = error instanceof Error ? error.message : "Failed to fork OpenAI thread.";
       if (context) {
         this.updateSession(context, {
           status: "error",
@@ -1718,10 +1722,10 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
     const token = this.readString(response, "authToken");
 
     if (!token) {
-      throw new Error("No ChatGPT session token is available. Sign in to ChatGPT in Codex.");
+      throw new Error("No ChatGPT session token is available. Sign in to ChatGPT in OpenAI CLI.");
     }
     if (authMethod !== "chatgpt" && authMethod !== "chatgptAuthTokens") {
-      throw new Error("Voice transcription requires a ChatGPT-authenticated Codex session.");
+      throw new Error("Voice transcription requires a ChatGPT-authenticated OpenAI CLI session.");
     }
 
     return {
@@ -2790,10 +2794,10 @@ function assertSupportedCodexCliVersion(input: {
       lower.includes("command not found") ||
       lower.includes("not found")
     ) {
-      throw new Error(`Codex CLI (${input.binaryPath}) is not installed or not executable.`);
+      throw new Error(`OpenAI CLI (${input.binaryPath}) is not installed or not executable.`);
     }
     throw new Error(
-      `Failed to execute Codex CLI version check: ${result.error.message || String(result.error)}`,
+      `Failed to execute OpenAI CLI version check: ${result.error.message || String(result.error)}`,
     );
   }
 
@@ -2801,7 +2805,7 @@ function assertSupportedCodexCliVersion(input: {
   const stderr = result.stderr ?? "";
   if (result.status !== 0) {
     const detail = stderr.trim() || stdout.trim() || `Command exited with code ${result.status}.`;
-    throw new Error(`Codex CLI version check failed. ${detail}`);
+    throw new Error(`OpenAI CLI version check failed. ${detail}`);
   }
 
   const parsedVersion = parseCodexCliVersion(`${stdout}\n${stderr}`);

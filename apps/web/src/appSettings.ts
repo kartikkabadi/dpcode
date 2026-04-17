@@ -1,6 +1,11 @@
 import { useCallback } from "react";
 import { Option, Schema } from "effect";
-import { TrimmedNonEmptyString, ProviderKind, type ProviderStartOptions } from "@t3tools/contracts";
+import {
+  TrimmedNonEmptyString,
+  ProviderKind,
+  PROVIDER_DISPLAY_NAMES,
+  type ProviderStartOptions,
+} from "@t3tools/contracts";
 import {
   getDefaultModel,
   getModelOptions,
@@ -29,7 +34,7 @@ export const DEFAULT_SIDEBAR_PROJECT_SORT_ORDER: SidebarProjectSortOrder = "upda
 export const SidebarThreadSortOrder = Schema.Literals(["updated_at", "created_at"]);
 export type SidebarThreadSortOrder = typeof SidebarThreadSortOrder.Type;
 export const DEFAULT_SIDEBAR_THREAD_SORT_ORDER: SidebarThreadSortOrder = "updated_at";
-type CustomModelSettingsKey = "customCodexModels" | "customClaudeModels";
+type CustomModelSettingsKey = "customCodexModels" | "customClaudeModels" | "customGeminiModels";
 export type ProviderCustomModelConfig = {
   provider: ProviderKind;
   settingsKey: CustomModelSettingsKey;
@@ -43,6 +48,7 @@ export type ProviderCustomModelConfig = {
 const BUILT_IN_MODEL_SLUGS_BY_PROVIDER: Record<ProviderKind, ReadonlySet<string>> = {
   codex: new Set(getModelOptions("codex").map((option) => option.slug)),
   claudeAgent: new Set(getModelOptions("claudeAgent").map((option) => option.slug)),
+  gemini: new Set(getModelOptions("gemini").map((option) => option.slug)),
 };
 
 const withDefaults =
@@ -64,6 +70,7 @@ export const AppSettingsSchema = Schema.Struct({
   chatCodeFontFamily: Schema.String.check(Schema.isMaxLength(256)).pipe(withDefaults(() => "")),
   codexBinaryPath: Schema.String.check(Schema.isMaxLength(4096)).pipe(withDefaults(() => "")),
   codexHomePath: Schema.String.check(Schema.isMaxLength(4096)).pipe(withDefaults(() => "")),
+  geminiBinaryPath: Schema.String.check(Schema.isMaxLength(4096)).pipe(withDefaults(() => "")),
   defaultThreadEnvMode: EnvMode.pipe(withDefaults(() => "local" as const satisfies EnvMode)),
   confirmThreadDelete: Schema.Boolean.pipe(withDefaults(() => true)),
   confirmThreadArchive: Schema.Boolean.pipe(withDefaults(() => false)),
@@ -82,6 +89,7 @@ export const AppSettingsSchema = Schema.Struct({
   timestampFormat: TimestampFormat.pipe(withDefaults(() => DEFAULT_TIMESTAMP_FORMAT)),
   customCodexModels: Schema.Array(Schema.String).pipe(withDefaults(() => [])),
   customClaudeModels: Schema.Array(Schema.String).pipe(withDefaults(() => [])),
+  customGeminiModels: Schema.Array(Schema.String).pipe(withDefaults(() => [])),
   textGenerationModel: Schema.optional(TrimmedNonEmptyString),
   uiFontFamily: Schema.String.check(Schema.isMaxLength(256)).pipe(withDefaults(() => "")),
   defaultProvider: ProviderKind.pipe(withDefaults(() => "codex" as const)),
@@ -99,10 +107,10 @@ const PROVIDER_CUSTOM_MODEL_CONFIG: Record<ProviderKind, ProviderCustomModelConf
     provider: "codex",
     settingsKey: "customCodexModels",
     defaultSettingsKey: "customCodexModels",
-    title: "Codex",
-    description: "Save additional Codex model slugs for the picker and `/model` command.",
-    placeholder: "your-codex-model-slug",
-    example: "gpt-6.7-codex-ultra-preview",
+    title: PROVIDER_DISPLAY_NAMES.codex,
+    description: "Save additional GPT model slugs for the picker and `/model` command.",
+    placeholder: "your-gpt-model-slug",
+    example: "gpt-6.7-preview",
   },
   claudeAgent: {
     provider: "claudeAgent",
@@ -112,6 +120,15 @@ const PROVIDER_CUSTOM_MODEL_CONFIG: Record<ProviderKind, ProviderCustomModelConf
     description: "Save additional Claude model slugs for the picker and `/model` command.",
     placeholder: "your-claude-model-slug",
     example: "claude-sonnet-5-0",
+  },
+  gemini: {
+    provider: "gemini",
+    settingsKey: "customGeminiModels",
+    defaultSettingsKey: "customGeminiModels",
+    title: "Gemini",
+    description: "Save additional Gemini model slugs for the picker and `/model` command.",
+    placeholder: "your-gemini-model-slug",
+    example: "gemini-3.5-pro-preview",
   },
 };
 export const MODEL_PROVIDER_SETTINGS = Object.values(PROVIDER_CUSTOM_MODEL_CONFIG);
@@ -159,6 +176,7 @@ function normalizeAppSettings(settings: AppSettings): AppSettings {
     chatFontSizePx: normalizeChatFontSizePx(settings.chatFontSizePx),
     customCodexModels: normalizeCustomModelSlugs(settings.customCodexModels, "codex"),
     customClaudeModels: normalizeCustomModelSlugs(settings.customClaudeModels, "claudeAgent"),
+    customGeminiModels: normalizeCustomModelSlugs(settings.customGeminiModels, "gemini"),
   };
 }
 
@@ -191,6 +209,7 @@ export function getCustomModelsByProvider(
   return {
     codex: getCustomModelsForProvider(settings, "codex"),
     claudeAgent: getCustomModelsForProvider(settings, "claudeAgent"),
+    gemini: getCustomModelsForProvider(settings, "gemini"),
   };
 }
 
@@ -256,11 +275,15 @@ export function getCustomModelOptionsByProvider(
   return {
     codex: getAppModelOptions("codex", customModelsByProvider.codex),
     claudeAgent: getAppModelOptions("claudeAgent", customModelsByProvider.claudeAgent),
+    gemini: getAppModelOptions("gemini", customModelsByProvider.gemini),
   };
 }
 
 export function getProviderStartOptions(
-  settings: Pick<AppSettings, "claudeBinaryPath" | "codexBinaryPath" | "codexHomePath">,
+  settings: Pick<
+    AppSettings,
+    "claudeBinaryPath" | "codexBinaryPath" | "codexHomePath" | "geminiBinaryPath"
+  >,
 ): ProviderStartOptions | undefined {
   const providerOptions: ProviderStartOptions = {
     ...(settings.codexBinaryPath || settings.codexHomePath
@@ -275,6 +298,13 @@ export function getProviderStartOptions(
       ? {
           claudeAgent: {
             binaryPath: settings.claudeBinaryPath,
+          },
+        }
+      : {}),
+    ...(settings.geminiBinaryPath
+      ? {
+          gemini: {
+            binaryPath: settings.geminiBinaryPath,
           },
         }
       : {}),

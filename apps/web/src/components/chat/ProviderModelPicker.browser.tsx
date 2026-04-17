@@ -12,8 +12,12 @@ const MODEL_OPTIONS_BY_PROVIDER = {
     { slug: "claude-haiku-4-5", name: "Claude Haiku 4.5" },
   ],
   codex: [
-    { slug: "gpt-5-codex", name: "GPT-5 Codex" },
-    { slug: "gpt-5.3-codex", name: "GPT-5.3 Codex" },
+    { slug: "gpt-5-codex", name: "GPT-5" },
+    { slug: "gpt-5.3-codex", name: "GPT-5.3" },
+  ],
+  gemini: [
+    { slug: "auto-gemini-3", name: "Auto Gemini 3" },
+    { slug: "gemini-2.5-pro", name: "Gemini 2.5 Pro" },
   ],
 } as const satisfies Record<ProviderKind, ReadonlyArray<{ slug: ModelSlug; name: string }>>;
 
@@ -64,7 +68,7 @@ describe("ProviderModelPicker", () => {
 
       await vi.waitFor(() => {
         const text = document.body.textContent ?? "";
-        expect(text).toContain("Codex");
+        expect(text).toContain("GPT");
         expect(text).toContain("Claude");
         expect(text).not.toContain("Claude Sonnet 4.6");
       });
@@ -87,7 +91,7 @@ describe("ProviderModelPicker", () => {
         const text = document.body.textContent ?? "";
         expect(text).toContain("Claude Sonnet 4.6");
         expect(text).toContain("Claude Haiku 4.5");
-        expect(text).not.toContain("Codex");
+        expect(text).not.toContain("GPT");
       });
     } finally {
       await mounted.cleanup();
@@ -142,7 +146,7 @@ describe("ProviderModelPicker", () => {
 
       await vi.waitFor(() => {
         const text = document.body.textContent ?? "";
-        expect(text).toContain("Codex");
+        expect(text).toContain("GPT");
         expect(text).toContain("Claude");
         expect(text).toContain("Sign in");
       });

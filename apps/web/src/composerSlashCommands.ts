@@ -112,7 +112,7 @@ const COMPOSER_SLASH_COMMAND_DEFINITIONS: Record<
   compact: {
     command: "compact",
     label: "/compact",
-    description: "Compact the current Codex thread to free context",
+    description: "Compact the current thread to free context",
     source: "app",
   },
   model: {
@@ -154,7 +154,7 @@ const COMPOSER_SLASH_COMMAND_DEFINITIONS: Record<
   subagents: {
     command: "subagents",
     label: "/subagents",
-    description: "Insert a prompt that asks Codex to delegate work",
+    description: "Insert a prompt that asks the assistant to delegate work",
     source: "app",
   },
   fast: {
@@ -332,7 +332,7 @@ export function getAvailableComposerSlashCommands(input: {
   );
 
   const availableCommands: ComposerSlashCommand[] =
-    input.provider === "codex"
+    input.provider !== "claudeAgent"
       ? [
           "clear",
           ...(input.canOfferCompactCommand ? (["compact"] as const) : []),

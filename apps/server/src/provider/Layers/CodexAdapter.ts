@@ -1426,7 +1426,7 @@ const makeCodexAdapter = (options?: CodexAdapterLiveOptions) =>
           new ProviderAdapterProcessError({
             provider: PROVIDER,
             threadId: input.threadId,
-            detail: toMessage(cause, "Failed to start Codex adapter session."),
+            detail: toMessage(cause, "Failed to start OpenAI adapter session."),
             cause,
           }),
       }).pipe(Effect.map((session) => session));

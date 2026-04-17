@@ -4,7 +4,6 @@ import path from "node:path";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import type {
-  Options as ClaudeQueryOptions,
   PermissionMode,
   PermissionResult,
   SDKMessage,
@@ -24,6 +23,8 @@ import { ServerConfig } from "../../config.ts";
 import { ProviderAdapterValidationError } from "../Errors.ts";
 import { ClaudeAdapter } from "../Services/ClaudeAdapter.ts";
 import { makeClaudeAdapterLive, type ClaudeAdapterLiveOptions } from "./ClaudeAdapter.ts";
+
+type CreateClaudeQueryInput = Parameters<NonNullable<ClaudeAdapterLiveOptions["createQuery"]>>[0];
 
 class FakeClaudeQuery implements AsyncIterable<SDKMessage> {
   private readonly queue: Array<SDKMessage> = [];
@@ -150,12 +151,7 @@ function makeHarness(config?: {
   readonly baseDir?: string;
 }) {
   const query = new FakeClaudeQuery();
-  let createInput:
-    | {
-        readonly prompt: AsyncIterable<SDKUserMessage>;
-        readonly options: ClaudeQueryOptions;
-      }
-    | undefined;
+  let createInput: CreateClaudeQueryInput | undefined;
 
   const adapterOptions: ClaudeAdapterLiveOptions = {
     createQuery: (input) => {

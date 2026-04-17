@@ -84,6 +84,11 @@ export const DEFAULT_SHORTCUT_FALLBACKS: ResolvedKeybindingsConfig = [
     whenAst: whenNotTerminalFocus,
   },
   {
+    command: "chat.newGemini",
+    shortcut: commandShortcut("g", { altKey: true }),
+    whenAst: whenNotTerminalFocus,
+  },
+  {
     command: "chat.split",
     shortcut: commandShortcut("\\"),
     whenAst: whenNotTerminalFocus,
@@ -585,6 +590,14 @@ export function isChatNewCodexShortcut(
   options?: ShortcutMatchOptions,
 ): boolean {
   return matchesCommandShortcut(event, keybindings, "chat.newCodex", options);
+}
+
+export function isChatNewGeminiShortcut(
+  event: ShortcutEventLike,
+  keybindings: ResolvedKeybindingsConfig,
+  options?: ShortcutMatchOptions,
+): boolean {
+  return matchesCommandShortcut(event, keybindings, "chat.newGemini", options);
 }
 
 export function isOpenFavoriteEditorShortcut(

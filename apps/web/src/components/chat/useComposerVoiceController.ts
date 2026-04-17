@@ -110,14 +110,14 @@ export function useComposerVoiceController(
     if (activeProviderStatus?.authStatus === "unauthenticated") {
       toastManager.add({
         type: "error",
-        title: "Sign in to ChatGPT in Codex before using voice notes.",
+        title: "Sign in to ChatGPT in OpenAI CLI before using voice notes.",
       });
       return;
     }
     if (!canStartVoiceNotes) {
       toastManager.add({
         type: "error",
-        title: "Voice notes require a ChatGPT-authenticated Codex session.",
+        title: "Voice notes require a ChatGPT-authenticated OpenAI CLI session.",
       });
       return;
     }
@@ -210,7 +210,7 @@ export function useComposerVoiceController(
         type: "error",
         title: authExpired ? "Sign in to ChatGPT again" : "Voice transcription failed",
         description: authExpired
-          ? "Voice transcription uses your ChatGPT session in Codex. That session was rejected, so sign in again there and retry."
+          ? "Voice transcription uses your ChatGPT session in OpenAI CLI. That session was rejected, so sign in again there and retry."
           : description,
         ...(authExpired
           ? {

@@ -9,7 +9,7 @@ import { type ProviderKind } from "@t3tools/contracts";
 import { HiOutlineFolderOpen } from "react-icons/hi2";
 import { LuArrowDownToLine, LuArrowLeft } from "react-icons/lu";
 import { type ComponentType, useEffect, useMemo, useState } from "react";
-import { ClaudeAI, OpenAI } from "./Icons";
+import { ClaudeAI, Gemini, OpenAI } from "./Icons";
 import { formatRelativeTime } from "./Sidebar";
 
 import {
@@ -92,11 +92,13 @@ function PaletteIcon(props: { icon: IconComponent }) {
   );
 }
 
-function ProviderIcon(props: { provider: "codex" | "claudeAgent" }) {
+function ProviderIcon(props: { provider: "codex" | "claudeAgent" | "gemini" }) {
   return (
     <div className="flex size-5 shrink-0 items-center justify-center">
       {props.provider === "claudeAgent" ? (
         <ClaudeAI aria-hidden="true" className="size-[15px] text-foreground" />
+      ) : props.provider === "gemini" ? (
+        <Gemini aria-hidden="true" className="size-[15px] text-foreground" />
       ) : (
         <OpenAI aria-hidden="true" className="size-[15px] text-muted-foreground/60" />
       )}

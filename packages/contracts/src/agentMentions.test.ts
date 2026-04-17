@@ -7,7 +7,7 @@ import {
 } from "./agentMentions";
 
 describe("agentMentions", () => {
-  it("shows one preferred alias per Codex model in autocomplete", () => {
+  it("shows one preferred alias per OpenAI model in autocomplete", () => {
     expect(getAgentMentionAutocompleteAliases("codex")).toEqual([
       {
         alias: "5.4",
@@ -30,7 +30,7 @@ describe("agentMentions", () => {
         provider: "codex",
         kind: "model",
         model: "gpt-5.3-codex",
-        displayName: "GPT-5.3 Codex",
+        displayName: "GPT-5.3",
         color: "teal",
       },
       {
@@ -54,7 +54,7 @@ describe("agentMentions", () => {
         provider: "codex",
         kind: "model",
         model: "gpt-5.2-codex",
-        displayName: "GPT-5.2 Codex",
+        displayName: "GPT-5.2",
         color: "orange",
       },
     ]);

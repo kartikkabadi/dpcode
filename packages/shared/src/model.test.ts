@@ -10,13 +10,16 @@ import {
 import {
   applyClaudePromptEffortPrefix,
   getDefaultModel,
+  getGeminiThinkingModelAlias,
   getModelCapabilities,
   getModelOptions,
   isClaudeUltrathinkPrompt,
   normalizeClaudeModelOptions,
   normalizeCodexModelOptions,
+  normalizeGeminiModelOptions,
   normalizeModelSlug,
   resolveSelectableModel,
+  resolveGeminiApiModelId,
   resolveModelSlug,
   resolveModelSlugForProvider,
   getDefaultEffort,
@@ -92,16 +95,16 @@ describe("resolveSelectableModel", () => {
     expect(
       resolveSelectableModel("codex", "gpt-5.3-codex", [
         { slug: "gpt-5.4", name: "GPT-5.4" },
-        { slug: "gpt-5.3-codex", name: "GPT-5.3 Codex" },
+        { slug: "gpt-5.3-codex", name: "GPT-5.3" },
       ]),
     ).toBe("gpt-5.3-codex");
   });
 
   it("resolves case-insensitive display-name matches", () => {
     expect(
-      resolveSelectableModel("codex", "gpt-5.3 codex", [
+      resolveSelectableModel("codex", "gpt-5.3", [
         { slug: "gpt-5.4", name: "GPT-5.4" },
-        { slug: "gpt-5.3-codex", name: "GPT-5.3 Codex" },
+        { slug: "gpt-5.3-codex", name: "GPT-5.3" },
       ]),
     ).toBe("gpt-5.3-codex");
   });
@@ -141,7 +144,7 @@ describe("resolveSelectableModel", () => {
 
   it("respects provider boundaries", () => {
     expect(
-      resolveSelectableModel("codex", "sonnet", [{ slug: "gpt-5.3-codex", name: "GPT-5.3 Codex" }]),
+      resolveSelectableModel("codex", "sonnet", [{ slug: "gpt-5.3-codex", name: "GPT-5.3" }]),
     ).toBeNull();
     expect(
       resolveSelectableModel("claudeAgent", "5.3", [
@@ -152,7 +155,7 @@ describe("resolveSelectableModel", () => {
 });
 
 describe("getModelCapabilities reasoningEffortLevels", () => {
-  const values = (provider: "codex" | "claudeAgent", model: string | null) =>
+  const values = (provider: "codex" | "claudeAgent" | "gemini", model: string | null) =>
     getModelCapabilities(provider, model).reasoningEffortLevels.map((l) => l.value);
 
   it("returns codex reasoning options for codex", () => {
@@ -194,6 +197,16 @@ describe("getModelCapabilities reasoningEffortLevels", () => {
     expect(values("claudeAgent", "claude-haiku-4-5")).toEqual([]);
   });
 
+  it("keeps Gemini 2.5 Pro and auto 2.5 on supported budgets only", () => {
+    expect(values("gemini", "gemini-2.5-pro")).toEqual(["-1", "512"]);
+    expect(values("gemini", "auto-gemini-2.5")).toEqual(["-1", "512"]);
+  });
+
+  it("keeps all Gemini 2.5 models on CLI-safe budgets only", () => {
+    expect(values("gemini", "gemini-2.5-flash")).toEqual(["-1", "512"]);
+    expect(values("gemini", "gemini-2.5-flash-lite")).toEqual(["-1", "512"]);
+  });
+
   it("co-locates labels with effort values", () => {
     const levels = getModelCapabilities("claudeAgent", "claude-opus-4-6").reasoningEffortLevels;
     const high = levels.find((l) => l.value === "high");
@@ -211,6 +224,7 @@ describe("getDefaultEffort", () => {
     expect(getDefaultEffort(getModelCapabilities("claudeAgent", "claude-opus-4-7"))).toBe("high");
     expect(getDefaultEffort(getModelCapabilities("claudeAgent", "claude-opus-4-6"))).toBe("high");
     expect(getDefaultEffort(getModelCapabilities("claudeAgent", "claude-haiku-4-5"))).toBeNull();
+    expect(getDefaultEffort(getModelCapabilities("gemini", "gemini-2.5-flash-lite"))).toBe("-1");
   });
 });
 
@@ -282,6 +296,32 @@ describe("normalizeClaudeModelOptions", () => {
     ).toEqual({
       thinking: false,
     });
+  });
+});
+
+describe("normalizeGeminiModelOptions", () => {
+  it("drops unsupported thinking-off overrides for the Gemini 2.5 family", () => {
+    expect(normalizeGeminiModelOptions("gemini-2.5-pro", { thinkingBudget: 0 })).toBeUndefined();
+    expect(normalizeGeminiModelOptions("auto-gemini-2.5", { thinkingBudget: 0 })).toBeUndefined();
+    expect(normalizeGeminiModelOptions("gemini-2.5-flash", { thinkingBudget: 0 })).toBeUndefined();
+    expect(
+      normalizeGeminiModelOptions("gemini-2.5-flash-lite", { thinkingBudget: 0 }),
+    ).toBeUndefined();
+  });
+});
+
+describe("getGeminiThinkingModelAlias", () => {
+  it("refuses unsupported Gemini 2.5 off aliases", () => {
+    expect(getGeminiThinkingModelAlias("gemini-2.5-pro", { thinkingBudget: 0 })).toBeNull();
+    expect(resolveGeminiApiModelId("gemini-2.5-pro", { thinkingBudget: 0 })).toBe("gemini-2.5-pro");
+    expect(getGeminiThinkingModelAlias("gemini-2.5-flash", { thinkingBudget: 0 })).toBeNull();
+    expect(resolveGeminiApiModelId("gemini-2.5-flash", { thinkingBudget: 0 })).toBe(
+      "gemini-2.5-flash",
+    );
+    expect(getGeminiThinkingModelAlias("gemini-2.5-flash-lite", { thinkingBudget: 0 })).toBeNull();
+    expect(resolveGeminiApiModelId("gemini-2.5-flash-lite", { thinkingBudget: 0 })).toBe(
+      "gemini-2.5-flash-lite",
+    );
   });
 });
 

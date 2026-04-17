@@ -4,6 +4,7 @@
 // Exports: Settings route component for `/settings`
 
 import {
+  PROVIDER_DISPLAY_NAMES,
   type ProviderKind,
   type ThreadId,
   DEFAULT_GIT_TEXT_GENERATION_MODEL,
@@ -24,7 +25,7 @@ import {
   useAppSettings,
 } from "../appSettings";
 import { APP_VERSION } from "../branding";
-import { ClaudeAI, OpenAI } from "../components/Icons";
+import { ClaudeAI, Gemini, OpenAI } from "../components/Icons";
 import { Button } from "../components/ui/button";
 import { Collapsible, CollapsibleContent } from "../components/ui/collapsible";
 import { Input } from "../components/ui/input";
@@ -112,7 +113,7 @@ const SIDEBAR_THREAD_SORT_ORDER_LABELS = {
   created_at: "Newest first",
 } as const;
 
-type InstallBinarySettingsKey = "claudeBinaryPath" | "codexBinaryPath";
+type InstallBinarySettingsKey = "claudeBinaryPath" | "codexBinaryPath" | "geminiBinaryPath";
 type InstallProviderSettings = {
   provider: ProviderKind;
   title: string;
@@ -127,9 +128,9 @@ type InstallProviderSettings = {
 const INSTALL_PROVIDER_SETTINGS: readonly InstallProviderSettings[] = [
   {
     provider: "codex",
-    title: "Codex",
+    title: PROVIDER_DISPLAY_NAMES.codex,
     binaryPathKey: "codexBinaryPath",
-    binaryPlaceholder: "Codex binary path",
+    binaryPlaceholder: "OpenAI CLI path",
     binaryDescription: (
       <>
         Leave blank to use <code>codex</code> from your PATH.
@@ -137,7 +138,7 @@ const INSTALL_PROVIDER_SETTINGS: readonly InstallProviderSettings[] = [
     ),
     homePathKey: "codexHomePath",
     homePlaceholder: "CODEX_HOME",
-    homeDescription: "Optional custom Codex home and config directory.",
+    homeDescription: "Optional custom OpenAI CLI config and auth directory.",
   },
   {
     provider: "claudeAgent",
@@ -147,6 +148,17 @@ const INSTALL_PROVIDER_SETTINGS: readonly InstallProviderSettings[] = [
     binaryDescription: (
       <>
         Leave blank to use <code>claude</code> from your PATH.
+      </>
+    ),
+  },
+  {
+    provider: "gemini",
+    title: "Gemini",
+    binaryPathKey: "geminiBinaryPath",
+    binaryPlaceholder: "Gemini binary path",
+    binaryDescription: (
+      <>
+        Leave blank to use <code>gemini</code> from your PATH.
       </>
     ),
   },
@@ -276,6 +288,7 @@ function SettingsRouteView() {
   const [openInstallProviders, setOpenInstallProviders] = useState<Record<ProviderKind, boolean>>({
     codex: Boolean(settings.codexBinaryPath || settings.codexHomePath),
     claudeAgent: Boolean(settings.claudeBinaryPath),
+    gemini: Boolean(settings.geminiBinaryPath),
   });
   const [selectedCustomModelProvider, setSelectedCustomModelProvider] =
     useState<ProviderKind>("codex");
@@ -284,6 +297,7 @@ function SettingsRouteView() {
   >({
     codex: "",
     claudeAgent: "",
+    gemini: "",
   });
   const [customModelErrorByProvider, setCustomModelErrorByProvider] = useState<
     Partial<Record<ProviderKind, string | null>>
@@ -296,6 +310,7 @@ function SettingsRouteView() {
   const codexBinaryPath = settings.codexBinaryPath;
   const codexHomePath = settings.codexHomePath;
   const claudeBinaryPath = settings.claudeBinaryPath;
+  const geminiBinaryPath = settings.geminiBinaryPath;
   const keybindingsConfigPath = serverConfigQuery.data?.keybindingsConfigPath ?? null;
   const availableEditors = serverConfigQuery.data?.availableEditors;
   const managedWorktrees = serverWorktreesQuery.data?.worktrees ?? [];
@@ -350,7 +365,10 @@ function SettingsRouteView() {
   )!;
   const selectedCustomModelInput = customModelInputByProvider[selectedCustomModelProvider];
   const selectedCustomModelError = customModelErrorByProvider[selectedCustomModelProvider] ?? null;
-  const totalCustomModels = settings.customCodexModels.length + settings.customClaudeModels.length;
+  const totalCustomModels =
+    settings.customCodexModels.length +
+    settings.customClaudeModels.length +
+    settings.customGeminiModels.length;
   const savedCustomModelRows = MODEL_PROVIDER_SETTINGS.flatMap((providerSettings) =>
     getCustomModelsForProvider(settings, providerSettings.provider).map((slug) => ({
       key: `${providerSettings.provider}:${slug}`,
@@ -364,6 +382,7 @@ function SettingsRouteView() {
     : savedCustomModelRows.slice(0, 5);
   const isInstallSettingsDirty =
     settings.claudeBinaryPath !== defaults.claudeBinaryPath ||
+    settings.geminiBinaryPath !== defaults.geminiBinaryPath ||
     settings.codexBinaryPath !== defaults.codexBinaryPath ||
     settings.codexHomePath !== defaults.codexHomePath;
 
@@ -403,7 +422,9 @@ function SettingsRouteView() {
       ? ["Terminal close confirmation"]
       : []),
     ...(isGitTextGenerationModelDirty ? ["Git writing model"] : []),
-    ...(settings.customCodexModels.length > 0 || settings.customClaudeModels.length > 0
+    ...(settings.customCodexModels.length > 0 ||
+    settings.customClaudeModels.length > 0 ||
+    settings.customGeminiModels.length > 0
       ? ["Custom models"]
       : []),
     ...(isInstallSettingsDirty ? ["Provider installs"] : []),
@@ -516,11 +537,13 @@ function SettingsRouteView() {
     setOpenInstallProviders({
       codex: false,
       claudeAgent: false,
+      gemini: false,
     });
     setSelectedCustomModelProvider("codex");
     setCustomModelInputByProvider({
       codex: "",
       claudeAgent: "",
+      gemini: "",
     });
     setCustomModelErrorByProvider({});
     setShowAllCustomModels(false);
@@ -814,7 +837,7 @@ function SettingsRouteView() {
               <Select
                 value={settings.defaultProvider}
                 onValueChange={(value) => {
-                  if (value !== "codex" && value !== "claudeAgent") return;
+                  if (value !== "codex" && value !== "claudeAgent" && value !== "gemini") return;
                   updateSettings({ defaultProvider: value });
                 }}
               >
@@ -823,10 +846,16 @@ function SettingsRouteView() {
                     <span className="flex items-center gap-2">
                       {settings.defaultProvider === "claudeAgent" ? (
                         <ClaudeAI className="size-3.5 text-foreground" />
+                      ) : settings.defaultProvider === "gemini" ? (
+                        <Gemini className="size-3.5 text-foreground" />
                       ) : (
                         <OpenAI className="size-3.5" />
                       )}
-                      {settings.defaultProvider === "claudeAgent" ? "Claude" : "Codex"}
+                      {settings.defaultProvider === "claudeAgent"
+                        ? PROVIDER_DISPLAY_NAMES.claudeAgent
+                        : settings.defaultProvider === "gemini"
+                          ? PROVIDER_DISPLAY_NAMES.gemini
+                          : PROVIDER_DISPLAY_NAMES.codex}
                     </span>
                   </SelectValue>
                 </SelectTrigger>
@@ -834,13 +863,19 @@ function SettingsRouteView() {
                   <SelectItem hideIndicator value="codex">
                     <span className="flex items-center gap-2">
                       <OpenAI className="size-3.5" />
-                      Codex
+                      {PROVIDER_DISPLAY_NAMES.codex}
                     </span>
                   </SelectItem>
                   <SelectItem hideIndicator value="claudeAgent">
                     <span className="flex items-center gap-2">
                       <ClaudeAI className="size-3.5 text-foreground" />
                       Claude
+                    </span>
+                  </SelectItem>
+                  <SelectItem hideIndicator value="gemini">
+                    <span className="flex items-center gap-2">
+                      <Gemini className="size-3.5 text-foreground" />
+                      Gemini
                     </span>
                   </SelectItem>
                 </SelectPopup>
@@ -1677,6 +1712,7 @@ function SettingsRouteView() {
                     updateSettings({
                       customCodexModels: defaults.customCodexModels,
                       customClaudeModels: defaults.customClaudeModels,
+                      customGeminiModels: defaults.customGeminiModels,
                     });
                     setCustomModelErrorByProvider({});
                     setShowAllCustomModels(false);
@@ -1690,7 +1726,7 @@ function SettingsRouteView() {
                 <Select
                   value={selectedCustomModelProvider}
                   onValueChange={(value) => {
-                    if (value !== "codex" && value !== "claudeAgent") {
+                    if (value !== "codex" && value !== "claudeAgent" && value !== "gemini") {
                       return;
                     }
                     setSelectedCustomModelProvider(value);
@@ -1814,10 +1850,12 @@ function SettingsRouteView() {
                       claudeBinaryPath: defaults.claudeBinaryPath,
                       codexBinaryPath: defaults.codexBinaryPath,
                       codexHomePath: defaults.codexHomePath,
+                      geminiBinaryPath: defaults.geminiBinaryPath,
                     });
                     setOpenInstallProviders({
                       codex: false,
                       claudeAgent: false,
+                      gemini: false,
                     });
                   }}
                 />
@@ -1832,11 +1870,15 @@ function SettingsRouteView() {
                     providerSettings.provider === "codex"
                       ? settings.codexBinaryPath !== defaults.codexBinaryPath ||
                         settings.codexHomePath !== defaults.codexHomePath
-                      : settings.claudeBinaryPath !== defaults.claudeBinaryPath;
+                      : providerSettings.provider === "claudeAgent"
+                        ? settings.claudeBinaryPath !== defaults.claudeBinaryPath
+                        : settings.geminiBinaryPath !== defaults.geminiBinaryPath;
                   const binaryPathValue =
                     providerSettings.binaryPathKey === "claudeBinaryPath"
                       ? claudeBinaryPath
-                      : codexBinaryPath;
+                      : providerSettings.binaryPathKey === "geminiBinaryPath"
+                        ? geminiBinaryPath
+                        : codexBinaryPath;
 
                   return (
                     <Collapsible
@@ -1892,7 +1934,9 @@ function SettingsRouteView() {
                                     updateSettings(
                                       providerSettings.binaryPathKey === "claudeBinaryPath"
                                         ? { claudeBinaryPath: event.target.value }
-                                        : { codexBinaryPath: event.target.value },
+                                        : providerSettings.binaryPathKey === "geminiBinaryPath"
+                                          ? { geminiBinaryPath: event.target.value }
+                                          : { codexBinaryPath: event.target.value },
                                     )
                                   }
                                   placeholder={providerSettings.binaryPlaceholder}

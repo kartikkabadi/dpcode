@@ -142,7 +142,7 @@ export function useComposerSlashCommands(input: {
       toastManager.add({
         type: "warning",
         title: "Compact is unavailable",
-        description: "Open an active Codex server thread before compacting context.",
+        description: "Open an active OpenAI server thread before compacting context.",
       });
       return false;
     }
@@ -165,7 +165,7 @@ export function useComposerSlashCommands(input: {
       toastManager.add({
         type: "success",
         title: "Compaction started",
-        description: "Codex is compacting the current thread context.",
+        description: "OpenAI is compacting the current thread context.",
       });
       return true;
     } catch (error) {

@@ -11,8 +11,6 @@ import {
   type OrchestrationEvent,
   type OrchestrationReadModel,
   type OrchestrationShellStreamEvent,
-  type OrchestrationShellSnapshot,
-  type OrchestrationThread,
   type ServerConfig,
   type WsWelcomePayload,
   WS_CHANNELS,
@@ -25,6 +23,11 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { render } from "vitest-browser-react";
 
 import { useComposerDraftStore } from "../composerDraftStore";
+import {
+  createShellSnapshotFromReadModel,
+  emitOrchestrationSubscriptionPushes,
+  getThreadDetailFromReadModel,
+} from "../lib/orchestrationBrowserTest";
 import { getRouter } from "../router";
 import { useStore } from "../store";
 import { getThreadFromState } from "../threadDerivation";
@@ -147,65 +150,6 @@ function buildFixture(): TestFixture {
   };
 }
 
-function createShellSnapshotFromFixtureSnapshot(
-  snapshot: OrchestrationReadModel,
-): OrchestrationShellSnapshot {
-  return {
-    snapshotSequence: snapshot.snapshotSequence,
-    projects: snapshot.projects
-      .filter((project) => project.deletedAt === null)
-      .map((project) => ({
-        id: project.id,
-        title: project.title,
-        workspaceRoot: project.workspaceRoot,
-        defaultModelSelection: project.defaultModelSelection,
-        scripts: project.scripts,
-        createdAt: project.createdAt,
-        updatedAt: project.updatedAt,
-      })),
-    threads: snapshot.threads
-      .filter((thread) => thread.deletedAt === null)
-      .map((thread) => ({
-        id: thread.id,
-        projectId: thread.projectId,
-        title: thread.title,
-        modelSelection: thread.modelSelection,
-        interactionMode: thread.interactionMode,
-        runtimeMode: thread.runtimeMode,
-        envMode: thread.envMode,
-        branch: thread.branch,
-        worktreePath: thread.worktreePath,
-        associatedWorktreePath: thread.associatedWorktreePath ?? null,
-        associatedWorktreeBranch: thread.associatedWorktreeBranch ?? null,
-        associatedWorktreeRef: thread.associatedWorktreeRef ?? null,
-        parentThreadId: thread.parentThreadId ?? null,
-        subagentAgentId: thread.subagentAgentId ?? null,
-        subagentNickname: thread.subagentNickname ?? null,
-        subagentRole: thread.subagentRole ?? null,
-        forkSourceThreadId: thread.forkSourceThreadId ?? null,
-        latestTurn: thread.latestTurn,
-        latestUserMessageAt: thread.latestUserMessageAt ?? null,
-        hasPendingApprovals: thread.hasPendingApprovals ?? false,
-        hasPendingUserInput: thread.hasPendingUserInput ?? false,
-        hasActionableProposedPlan: thread.hasActionableProposedPlan ?? false,
-        createdAt: thread.createdAt,
-        updatedAt: thread.updatedAt,
-        archivedAt: thread.archivedAt ?? null,
-        handoff: thread.handoff ?? null,
-        session: thread.session,
-      })),
-    updatedAt: snapshot.updatedAt,
-  };
-}
-
-function getThreadDetailFromFixtureSnapshot(threadId: ThreadId): OrchestrationThread {
-  const thread = fixture.snapshot.threads.find((entry) => entry.id === threadId);
-  if (!thread) {
-    throw new Error(`Missing thread fixture for ${threadId}`);
-  }
-  return thread;
-}
-
 function resolveWsRpc(tag: string): unknown {
   if (tag === ORCHESTRATION_WS_METHODS.getSnapshot) {
     return fixture.snapshot;
@@ -269,40 +213,19 @@ const worker = setupWorker(
           result: resolveWsRpc(method),
         }),
       );
-      if (method === ORCHESTRATION_WS_METHODS.subscribeShell) {
-        client.send(
-          JSON.stringify({
-            type: "push",
-            sequence: pushSequence++,
-            channel: ORCHESTRATION_WS_CHANNELS.shellEvent,
-            data: {
-              kind: "snapshot",
-              snapshot: createShellSnapshotFromFixtureSnapshot(fixture.snapshot),
-            },
-          }),
-        );
-      }
-      if (method === ORCHESTRATION_WS_METHODS.subscribeThread && "threadId" in request.body) {
-        const threadId = request.body.threadId as ThreadId;
-        if (delayNextThreadSnapshot) {
+      emitOrchestrationSubscriptionPushes({
+        client,
+        snapshot: fixture.snapshot,
+        requestBody: request.body,
+        nextSequence: () => pushSequence++,
+        skipThreadSnapshot: () => {
+          if (!delayNextThreadSnapshot) {
+            return false;
+          }
           delayNextThreadSnapshot = false;
-          return;
-        }
-        client.send(
-          JSON.stringify({
-            type: "push",
-            sequence: pushSequence++,
-            channel: ORCHESTRATION_WS_CHANNELS.threadEvent,
-            data: {
-              kind: "snapshot",
-              snapshot: {
-                snapshotSequence: fixture.snapshot.snapshotSequence,
-                thread: getThreadDetailFromFixtureSnapshot(threadId),
-              },
-            },
-          }),
-        );
-      }
+          return true;
+        },
+      });
     });
   }),
   http.get("*/attachments/:attachmentId", () => new HttpResponse(null, { status: 204 })),
@@ -378,7 +301,7 @@ function sendThreadSnapshotPush(threadId: ThreadId, snapshotSequence: number) {
         kind: "snapshot",
         snapshot: {
           snapshotSequence,
-          thread: getThreadDetailFromFixtureSnapshot(threadId),
+          thread: getThreadDetailFromReadModel(fixture.snapshot, threadId),
         },
       },
     }),
@@ -720,7 +643,7 @@ describe("EventRouter scoped orchestration sync", () => {
       sendShellEventPush({
         kind: "thread-upserted",
         sequence: 2,
-        thread: createShellSnapshotFromFixtureSnapshot(fixture.snapshot).threads.find(
+        thread: createShellSnapshotFromReadModel(fixture.snapshot).threads.find(
           (thread) => thread.id === draftThreadId,
         )!,
       });

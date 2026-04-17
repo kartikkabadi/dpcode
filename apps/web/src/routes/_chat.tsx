@@ -105,13 +105,22 @@ function ChatRouteGlobalShortcuts() {
         return;
       }
 
-      if (command === "chat.newClaude" || command === "chat.newCodex") {
+      if (
+        command === "chat.newClaude" ||
+        command === "chat.newCodex" ||
+        command === "chat.newGemini"
+      ) {
         const projectId = activeProjectId ?? projects[0]?.id;
         if (!projectId) return;
         event.preventDefault();
         event.stopPropagation();
         void handleNewThread(projectId, {
-          provider: command === "chat.newClaude" ? "claudeAgent" : "codex",
+          provider:
+            command === "chat.newClaude"
+              ? "claudeAgent"
+              : command === "chat.newCodex"
+                ? "codex"
+                : "gemini",
           branch: activeThread?.branch ?? activeDraftThread?.branch ?? null,
           worktreePath: activeThread?.worktreePath ?? activeDraftThread?.worktreePath ?? null,
           envMode:

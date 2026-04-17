@@ -841,7 +841,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
             Effect.fail(
               new TextGenerationError({
                 operation: "generateCommitMessage",
-                detail: "Codex CLI command failed: skills loader failed",
+                detail: "OpenAI CLI command failed: skills loader failed",
               }),
             ),
         },
@@ -995,7 +995,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
             Effect.fail(
               new TextGenerationError({
                 operation: "generateCommitMessage",
-                detail: "Codex CLI command failed: skills loader failed",
+                detail: "OpenAI CLI command failed: skills loader failed",
               }),
             ),
         },

@@ -502,7 +502,7 @@ describe("startSession", () => {
       )
       .mockImplementation(() => {
         throw new Error(
-          "Codex CLI v0.36.0 is too old for DP Code. Upgrade to v0.37.0 or newer and restart DP Code.",
+          "OpenAI CLI (`codex`) v0.36.0 is too old for DP Code. Upgrade to v0.37.0 or newer and restart DP Code.",
         );
       });
 
@@ -514,7 +514,7 @@ describe("startSession", () => {
           runtimeMode: "full-access",
         }),
       ).rejects.toThrow(
-        "Codex CLI v0.36.0 is too old for DP Code. Upgrade to v0.37.0 or newer and restart DP Code.",
+        "OpenAI CLI (`codex`) v0.36.0 is too old for DP Code. Upgrade to v0.37.0 or newer and restart DP Code.",
       );
       expect(versionCheck).toHaveBeenCalledTimes(1);
       expect(events).toEqual([
@@ -522,7 +522,7 @@ describe("startSession", () => {
           method: "session/startFailed",
           kind: "error",
           message:
-            "Codex CLI v0.36.0 is too old for DP Code. Upgrade to v0.37.0 or newer and restart DP Code.",
+            "OpenAI CLI (`codex`) v0.36.0 is too old for DP Code. Upgrade to v0.37.0 or newer and restart DP Code.",
         },
       ]);
     } finally {

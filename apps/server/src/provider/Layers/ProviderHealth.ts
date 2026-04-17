@@ -38,6 +38,7 @@ import {
   parseCodexCliVersion,
 } from "../codexCliVersion";
 import { ServerConfig } from "../../config";
+import { normalizeGeminiCapabilityProbeResult, probeGeminiCapabilities } from "../geminiAcpProbe";
 import { ProviderHealth, type ProviderHealthShape } from "../Services/ProviderHealth";
 import {
   orderProviderStatuses,
@@ -49,6 +50,7 @@ import {
 const DEFAULT_TIMEOUT_MS = 4_000;
 const CODEX_PROVIDER = "codex" as const;
 const CLAUDE_AGENT_PROVIDER = "claudeAgent" as const;
+const GEMINI_PROVIDER = "gemini" as const;
 type ProviderStatuses = ReadonlyArray<ServerProviderStatus>;
 
 // ── Pure helpers ────────────────────────────────────────────────────
@@ -159,7 +161,8 @@ export function parseAuthStatusFromOutput(result: CommandResult): {
     return {
       status: "warning",
       authStatus: "unknown",
-      message: "Codex CLI authentication status command is unavailable in this Codex version.",
+      message:
+        "OpenAI CLI authentication status command is unavailable in this installed CLI version.",
     };
   }
 
@@ -173,7 +176,7 @@ export function parseAuthStatusFromOutput(result: CommandResult): {
     return {
       status: "error",
       authStatus: "unauthenticated",
-      message: "Codex CLI is not authenticated. Run `codex login` and try again.",
+      message: "OpenAI CLI (`codex`) is not authenticated. Run `codex login` and try again.",
     };
   }
 
@@ -216,7 +219,7 @@ export function parseAuthStatusFromOutput(result: CommandResult): {
     return {
       status: "error",
       authStatus: "unauthenticated",
-      message: "Codex CLI is not authenticated. Run `codex login` and try again.",
+      message: "OpenAI CLI (`codex`) is not authenticated. Run `codex login` and try again.",
     };
   }
   if (parsedAuth.attemptedJsonParse) {
@@ -224,7 +227,7 @@ export function parseAuthStatusFromOutput(result: CommandResult): {
       status: "warning",
       authStatus: "unknown",
       message:
-        "Could not verify Codex authentication status from JSON output (missing auth marker).",
+        "Could not verify OpenAI authentication status from JSON output (missing auth marker).",
     };
   }
   if (result.code === 0) {
@@ -236,8 +239,8 @@ export function parseAuthStatusFromOutput(result: CommandResult): {
     status: "warning",
     authStatus: "unknown",
     message: detail
-      ? `Could not verify Codex authentication status. ${detail}`
-      : "Could not verify Codex authentication status.",
+      ? `Could not verify OpenAI authentication status. ${detail}`
+      : "Could not verify OpenAI authentication status.",
   };
 }
 
@@ -340,6 +343,27 @@ const runClaudeCommand = (args: ReadonlyArray<string>) =>
     return { stdout, stderr, code: exitCode } satisfies CommandResult;
   }).pipe(Effect.scoped);
 
+const runGeminiCommand = (args: ReadonlyArray<string>) =>
+  Effect.gen(function* () {
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const command = ChildProcess.make("gemini", [...args], {
+      shell: process.platform === "win32",
+    });
+
+    const child = yield* spawner.spawn(command);
+
+    const [stdout, stderr, exitCode] = yield* Effect.all(
+      [
+        collectStreamAsString(child.stdout),
+        collectStreamAsString(child.stderr),
+        child.exitCode.pipe(Effect.map(Number)),
+      ],
+      { concurrency: "unbounded" },
+    );
+
+    return { stdout, stderr, code: exitCode } satisfies CommandResult;
+  }).pipe(Effect.scoped);
+
 // ── Health check ────────────────────────────────────────────────────
 
 export const checkCodexProviderStatus: Effect.Effect<
@@ -364,8 +388,8 @@ export const checkCodexProviderStatus: Effect.Effect<
       authStatus: "unknown" as const,
       checkedAt,
       message: isCommandMissingCause(error)
-        ? "Codex CLI (`codex`) is not installed or not on PATH."
-        : `Failed to execute Codex CLI health check: ${error instanceof Error ? error.message : String(error)}.`,
+        ? "OpenAI CLI (`codex`) is not installed or not on PATH."
+        : `Failed to execute OpenAI CLI health check: ${error instanceof Error ? error.message : String(error)}.`,
     };
   }
 
@@ -376,7 +400,8 @@ export const checkCodexProviderStatus: Effect.Effect<
       available: false,
       authStatus: "unknown" as const,
       checkedAt,
-      message: "Codex CLI is installed but failed to run. Timed out while running command.",
+      message:
+        "OpenAI CLI (`codex`) is installed but failed to run. Timed out while running command.",
     };
   }
 
@@ -390,8 +415,8 @@ export const checkCodexProviderStatus: Effect.Effect<
       authStatus: "unknown" as const,
       checkedAt,
       message: detail
-        ? `Codex CLI is installed but failed to run. ${detail}`
-        : "Codex CLI is installed but failed to run.",
+        ? `OpenAI CLI (\`codex\`) is installed but failed to run. ${detail}`
+        : "OpenAI CLI (`codex`) is installed but failed to run.",
     };
   }
 
@@ -420,7 +445,7 @@ export const checkCodexProviderStatus: Effect.Effect<
       available: true,
       authStatus: "unknown" as const,
       checkedAt,
-      message: "Using a custom Codex model provider; OpenAI login check skipped.",
+      message: "Using a custom model provider; OpenAI login check skipped.",
     } satisfies ServerProviderStatus;
   }
 
@@ -439,8 +464,8 @@ export const checkCodexProviderStatus: Effect.Effect<
       checkedAt,
       message:
         error instanceof Error
-          ? `Could not verify Codex authentication status: ${error.message}.`
-          : "Could not verify Codex authentication status.",
+          ? `Could not verify OpenAI authentication status: ${error.message}.`
+          : "Could not verify OpenAI authentication status.",
     };
   }
 
@@ -451,7 +476,7 @@ export const checkCodexProviderStatus: Effect.Effect<
       available: true,
       authStatus: "unknown" as const,
       checkedAt,
-      message: "Could not verify Codex authentication status. Timed out while running command.",
+      message: "Could not verify OpenAI authentication status. Timed out while running command.",
     };
   }
 
@@ -649,6 +674,89 @@ export const checkClaudeProviderStatus: Effect.Effect<
   } satisfies ServerProviderStatus;
 });
 
+export const checkGeminiProviderStatus: Effect.Effect<
+  ServerProviderStatus,
+  never,
+  ChildProcessSpawner.ChildProcessSpawner
+> = Effect.gen(function* () {
+  const checkedAt = new Date().toISOString();
+
+  const versionProbe = yield* runGeminiCommand(["--version"]).pipe(
+    Effect.timeoutOption(DEFAULT_TIMEOUT_MS),
+    Effect.result,
+  );
+
+  if (Result.isFailure(versionProbe)) {
+    const error = versionProbe.failure;
+    return {
+      provider: GEMINI_PROVIDER,
+      status: "error" as const,
+      available: false,
+      authStatus: "unknown" as const,
+      checkedAt,
+      message: isCommandMissingCause(error)
+        ? "Gemini CLI (`gemini`) is not installed or not on PATH."
+        : `Failed to execute Gemini CLI health check: ${error instanceof Error ? error.message : String(error)}.`,
+    };
+  }
+
+  if (Option.isNone(versionProbe.success)) {
+    return {
+      provider: GEMINI_PROVIDER,
+      status: "error" as const,
+      available: false,
+      authStatus: "unknown" as const,
+      checkedAt,
+      message: "Gemini CLI is installed but failed to run. Timed out while running command.",
+    };
+  }
+
+  const version = versionProbe.success.value;
+  if (version.code !== 0) {
+    const detail = detailFromResult(version);
+    return {
+      provider: GEMINI_PROVIDER,
+      status: "error" as const,
+      available: false,
+      authStatus: "unknown" as const,
+      checkedAt,
+      message: detail
+        ? `Gemini CLI is installed but failed to run. ${detail}`
+        : "Gemini CLI is installed but failed to run.",
+    };
+  }
+
+  const capabilityProbe = yield* probeGeminiCapabilities({
+    binaryPath: "gemini",
+    cwd: OS.homedir(),
+  }).pipe(Effect.result);
+
+  if (Result.isFailure(capabilityProbe)) {
+    const error = capabilityProbe.failure;
+    return {
+      provider: GEMINI_PROVIDER,
+      status: "warning" as const,
+      available: true,
+      authStatus: "unknown" as const,
+      checkedAt,
+      message:
+        error instanceof Error
+          ? `Could not verify Gemini authentication status: ${error.message}.`
+          : "Could not verify Gemini authentication status.",
+    };
+  }
+
+  const parsed = normalizeGeminiCapabilityProbeResult(capabilityProbe.success);
+  return {
+    provider: GEMINI_PROVIDER,
+    status: parsed.status,
+    available: true,
+    authStatus: parsed.auth.status,
+    checkedAt,
+    ...(parsed.message ? { message: parsed.message } : {}),
+  } satisfies ServerProviderStatus;
+});
+
 // ── Snapshot helpers ────────────────────────────────────────────────
 
 function providerStatusesEqual(left: ProviderStatuses, right: ProviderStatuses): boolean {
@@ -686,7 +794,7 @@ export const ProviderHealthLive = Layer.effect(
     yield* Effect.addFinalizer(() => Scope.close(refreshScope, Exit.void));
 
     const cachePathByProvider = new Map(
-      [CODEX_PROVIDER, CLAUDE_AGENT_PROVIDER].map(
+      [CODEX_PROVIDER, CLAUDE_AGENT_PROVIDER, GEMINI_PROVIDER].map(
         (provider) =>
           [
             provider,
@@ -699,7 +807,7 @@ export const ProviderHealthLive = Layer.effect(
     );
 
     const cachedStatuses: ProviderStatuses = yield* Effect.forEach(
-      [CODEX_PROVIDER, CLAUDE_AGENT_PROVIDER] as const,
+      [CODEX_PROVIDER, CLAUDE_AGENT_PROVIDER, GEMINI_PROVIDER] as const,
       (provider) =>
         readProviderStatusCache(cachePathByProvider.get(provider)!).pipe(
           Effect.provideService(FileSystem.FileSystem, fileSystem),
@@ -716,9 +824,12 @@ export const ProviderHealthLive = Layer.effect(
     const statusesRef = yield* Ref.make<ProviderStatuses>(cachedStatuses);
     const refreshFiberRef = yield* Ref.make<Fiber.Fiber<ProviderStatuses, never> | null>(null);
 
-    const loadProviderStatuses = Effect.all([checkCodexProviderStatus, checkClaudeProviderStatus], {
-      concurrency: "unbounded",
-    }).pipe(
+    const loadProviderStatuses = Effect.all(
+      [checkCodexProviderStatus, checkClaudeProviderStatus, checkGeminiProviderStatus],
+      {
+        concurrency: "unbounded",
+      },
+    ).pipe(
       Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
       Effect.provideService(FileSystem.FileSystem, fileSystem),
       Effect.provideService(Path.Path, path),

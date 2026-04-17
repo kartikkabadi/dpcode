@@ -18,6 +18,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { render } from "vitest-browser-react";
 
 import { useComposerDraftStore } from "../composerDraftStore";
+import { emitOrchestrationSubscriptionPushes } from "../lib/orchestrationBrowserTest";
 import { getRouter } from "../router";
 import { useStore } from "../store";
 
@@ -197,6 +198,12 @@ const worker = setupWorker(
           result: resolveWsRpc(method),
         }),
       );
+      emitOrchestrationSubscriptionPushes({
+        client,
+        snapshot: fixture.snapshot,
+        requestBody: request.body,
+        nextSequence: () => pushSequence++,
+      });
     });
   }),
   http.get("*/attachments/:attachmentId", () => new HttpResponse(null, { status: 204 })),

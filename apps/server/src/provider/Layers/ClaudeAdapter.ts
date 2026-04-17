@@ -89,6 +89,10 @@ import {
 import { ClaudeAdapter, type ClaudeAdapterShape } from "../Services/ClaudeAdapter.ts";
 import { type EventNdjsonLogger, makeEventNdjsonLogger } from "./EventNdjsonLogger.ts";
 
+type ClaudeQueryOptionsWithExtendedEffort = Omit<ClaudeQueryOptions, "effort"> & {
+  effort?: NonNullable<ClaudeQueryOptions["effort"]> | "xhigh";
+};
+
 const PROVIDER = "claudeAgent" as const;
 type ClaudeTextStreamKind = Extract<RuntimeContentStreamKind, "assistant_text" | "reasoning_text">;
 type ClaudeToolResultStreamKind = Extract<
@@ -193,7 +197,7 @@ interface ClaudeQueryRuntime extends AsyncIterable<SDKMessage> {
 export interface ClaudeAdapterLiveOptions {
   readonly createQuery?: (input: {
     readonly prompt: AsyncIterable<SDKUserMessage>;
-    readonly options: ClaudeQueryOptions;
+    readonly options: ClaudeQueryOptionsWithExtendedEffort;
   }) => ClaudeQueryRuntime;
   readonly nativeEventLogPath?: string;
   readonly nativeEventLogger?: EventNdjsonLogger;
@@ -1144,8 +1148,12 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
       options?.createQuery ??
       ((input: {
         readonly prompt: AsyncIterable<SDKUserMessage>;
-        readonly options: ClaudeQueryOptions;
-      }) => query({ prompt: input.prompt, options: input.options }) as ClaudeQueryRuntime);
+        readonly options: ClaudeQueryOptionsWithExtendedEffort;
+      }) =>
+        query({
+          prompt: input.prompt,
+          options: input.options as ClaudeQueryOptions,
+        }) as ClaudeQueryRuntime);
 
     const sessions = new Map<ThreadId, ClaudeSessionContext>();
     let cachedModels: ProviderListModelsResult | null = null;
@@ -3088,16 +3096,13 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
         };
         const claudeSubagents = buildClaudeSdkSubagents();
 
-        const queryOptions: ClaudeQueryOptions = {
+        const queryOptions: ClaudeQueryOptionsWithExtendedEffort = {
           ...(input.cwd ? { cwd: input.cwd } : {}),
           ...(modelSelection?.model ? { model: modelSelection.model } : {}),
           pathToClaudeCodeExecutable: providerOptions?.binaryPath ?? "claude",
           settingSources: [...CLAUDE_SETTING_SOURCES],
           ...(Object.keys(claudeSubagents).length > 0 ? { agents: claudeSubagents } : {}),
-          // Keep the runtime value explicit so Opus 4.7 can pass xhigh through to the SDK.
-          ...(effectiveEffort
-            ? { effort: effectiveEffort as "low" | "medium" | "high" | "xhigh" | "max" }
-            : {}),
+          ...(effectiveEffort ? { effort: effectiveEffort } : {}),
           ...(permissionMode ? { permissionMode } : {}),
           ...(permissionMode === "bypassPermissions"
             ? { allowDangerouslySkipPermissions: true }

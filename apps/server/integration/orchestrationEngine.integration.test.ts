@@ -1267,10 +1267,27 @@ itLiveUnlessCi("reverts claudeAgent turns and rolls back provider conversation s
           },
         });
 
+        yield* harness.waitForReceipt(
+          (receipt): receipt is CheckpointDiffFinalizedReceipt =>
+            receipt.type === "checkpoint.diff.finalized" &&
+            receipt.threadId === THREAD_ID &&
+            receipt.checkpointTurnCount === 1,
+        );
+        yield* harness.waitForReceipt(
+          (receipt): receipt is TurnProcessingQuiescedReceipt =>
+            receipt.type === "turn.processing.quiesced" &&
+            receipt.threadId === THREAD_ID &&
+            receipt.checkpointTurnCount === 1,
+        );
         yield* harness.waitForThread(
           THREAD_ID,
           (entry) =>
-            entry.latestTurn?.turnId === "turn-1" && entry.session?.threadId === "thread-1",
+            entry.session?.providerName === "claudeAgent" &&
+            entry.session?.threadId === "thread-1" &&
+            entry.checkpoints.length === 1 &&
+            entry.messages.some(
+              (message) => message.role === "assistant" && message.text === "README -> v2\n",
+            ),
         );
 
         yield* harness.adapterHarness!.queueTurnResponse(THREAD_ID, {
@@ -1309,12 +1326,27 @@ itLiveUnlessCi("reverts claudeAgent turns and rolls back provider conversation s
           text: "Second Claude edit",
         });
 
+        yield* harness.waitForReceipt(
+          (receipt): receipt is CheckpointDiffFinalizedReceipt =>
+            receipt.type === "checkpoint.diff.finalized" &&
+            receipt.threadId === THREAD_ID &&
+            receipt.checkpointTurnCount === 2,
+        );
+        yield* harness.waitForReceipt(
+          (receipt): receipt is TurnProcessingQuiescedReceipt =>
+            receipt.type === "turn.processing.quiesced" &&
+            receipt.threadId === THREAD_ID &&
+            receipt.checkpointTurnCount === 2,
+        );
         yield* harness.waitForThread(
           THREAD_ID,
           (entry) =>
-            entry.latestTurn?.turnId === "turn-2" &&
+            entry.session?.providerName === "claudeAgent" &&
+            entry.session?.threadId === "thread-1" &&
             entry.checkpoints.length === 2 &&
-            entry.session?.providerName === "claudeAgent",
+            entry.messages.some(
+              (message) => message.role === "assistant" && message.text === "README -> v3\n",
+            ),
         );
 
         yield* harness.engine.dispatch({
@@ -1325,6 +1357,7 @@ itLiveUnlessCi("reverts claudeAgent turns and rolls back provider conversation s
           createdAt: nowIso(),
         });
 
+        yield* harness.waitForDomainEvent((event) => event.type === "thread.reverted");
         const revertedThread = yield* harness.waitForThread(
           THREAD_ID,
           (entry) =>

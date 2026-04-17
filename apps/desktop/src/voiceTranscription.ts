@@ -111,7 +111,7 @@ async function resolveDesktopVoiceAuth(
     };
 
     child.once("error", (error) => {
-      rejectOnce(new Error(`Could not start Codex auth discovery: ${error.message}`));
+      rejectOnce(new Error(`Could not start OpenAI CLI auth discovery: ${error.message}`));
     });
     child.stderr.on("data", () => {
       // Ignore stderr noise from the discovery process; the JSON-RPC result is authoritative.
@@ -151,13 +151,13 @@ async function resolveDesktopVoiceAuth(
         const token = readNonEmptyString(result?.authToken);
         if (!token) {
           rejectOnce(
-            new Error("No ChatGPT session token is available. Sign in to ChatGPT in Codex."),
+            new Error("No ChatGPT session token is available. Sign in to ChatGPT in OpenAI CLI."),
           );
           return;
         }
         if (authMethod !== "chatgpt" && authMethod !== "chatgptAuthTokens") {
           rejectOnce(
-            new Error("Voice transcription requires a ChatGPT-authenticated Codex session."),
+            new Error("Voice transcription requires a ChatGPT-authenticated OpenAI CLI session."),
           );
           return;
         }
@@ -187,7 +187,7 @@ async function resolveDesktopVoiceAuth(
     }, 100);
 
     setTimeout(() => {
-      rejectOnce(new Error("Timed out while reading ChatGPT auth from Codex."));
+      rejectOnce(new Error("Timed out while reading ChatGPT auth from OpenAI CLI."));
     }, 10_000).unref();
   });
 }
@@ -257,7 +257,7 @@ function readVoiceResponseErrorMessage(statusCode: number, body: string): string
     return "Your ChatGPT login has expired. Sign in again.";
   }
   if (statusCode === 403) {
-    return "ChatGPT rejected the transcription request. Your Codex login is present, but this desktop upload was forbidden.";
+    return "ChatGPT rejected the transcription request. Your OpenAI CLI login is present, but this desktop upload was forbidden.";
   }
 
   return `Transcription failed with status ${statusCode}.`;

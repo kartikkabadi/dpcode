@@ -55,7 +55,7 @@ function normalizeCodexError(
     ) {
       return new TextGenerationError({
         operation,
-        detail: "Codex CLI (`codex`) is required but not available on PATH.",
+        detail: "OpenAI CLI (`codex`) is required but not available on PATH.",
         cause: error,
       });
     }
@@ -224,7 +224,7 @@ const makeCodexTextGeneration = Effect.gen(function* () {
           (cause) =>
             new TextGenerationError({
               operation,
-              detail: `Failed to create isolated Codex home at ${isolatedHomePath}.`,
+              detail: `Failed to create isolated OpenAI CLI home at ${isolatedHomePath}.`,
               cause,
             }),
         ),
@@ -244,7 +244,7 @@ const makeCodexTextGeneration = Effect.gen(function* () {
               (cause) =>
                 new TextGenerationError({
                   operation,
-                  detail: "Failed to copy Codex config for isolated text generation.",
+                  detail: "Failed to copy OpenAI CLI config for isolated text generation.",
                   cause,
                 }),
             ),
@@ -262,7 +262,7 @@ const makeCodexTextGeneration = Effect.gen(function* () {
               (cause) =>
                 new TextGenerationError({
                   operation,
-                  detail: "Failed to copy Codex auth for isolated text generation.",
+                  detail: "Failed to copy OpenAI CLI auth for isolated text generation.",
                   cause,
                 }),
             ),
@@ -376,7 +376,7 @@ const makeCodexTextGeneration = Effect.gen(function* () {
           .spawn(command)
           .pipe(
             Effect.mapError((cause) =>
-              normalizeCodexError(operation, cause, "Failed to spawn Codex CLI process"),
+              normalizeCodexError(operation, cause, "Failed to spawn OpenAI CLI process"),
             ),
           );
 
@@ -387,7 +387,7 @@ const makeCodexTextGeneration = Effect.gen(function* () {
             child.exitCode.pipe(
               Effect.map((value) => Number(value)),
               Effect.mapError((cause) =>
-                normalizeCodexError(operation, cause, "Failed to read Codex CLI exit code"),
+                normalizeCodexError(operation, cause, "Failed to read OpenAI CLI exit code"),
               ),
             ),
           ],
@@ -402,8 +402,8 @@ const makeCodexTextGeneration = Effect.gen(function* () {
             operation,
             detail:
               detail.length > 0
-                ? `Codex CLI command failed: ${detail}`
-                : `Codex CLI command failed with code ${exitCode}.`,
+                ? `OpenAI CLI command failed: ${detail}`
+                : `OpenAI CLI command failed with code ${exitCode}.`,
           });
         }
       });
@@ -428,7 +428,7 @@ const makeCodexTextGeneration = Effect.gen(function* () {
             Option.match({
               onNone: () =>
                 Effect.fail(
-                  new TextGenerationError({ operation, detail: "Codex CLI request timed out." }),
+                  new TextGenerationError({ operation, detail: "OpenAI CLI request timed out." }),
                 ),
               onSome: () => Effect.void,
             }),
@@ -440,7 +440,7 @@ const makeCodexTextGeneration = Effect.gen(function* () {
             (cause) =>
               new TextGenerationError({
                 operation,
-                detail: "Failed to read Codex output file.",
+                detail: "Failed to read OpenAI CLI output file.",
                 cause,
               }),
           ),
@@ -449,7 +449,7 @@ const makeCodexTextGeneration = Effect.gen(function* () {
             Effect.fail(
               new TextGenerationError({
                 operation,
-                detail: "Codex returned invalid structured output.",
+                detail: "OpenAI CLI returned invalid structured output.",
                 cause,
               }),
             ),

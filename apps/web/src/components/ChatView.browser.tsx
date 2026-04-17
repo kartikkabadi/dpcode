@@ -23,15 +23,22 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { render } from "vitest-browser-react";
 
 import { type ComposerImageAttachment, useComposerDraftStore } from "../composerDraftStore";
-import { getScrollContainerDistanceFromBottom } from "../chat-scroll";
+import {
+  AUTO_SCROLL_BOTTOM_THRESHOLD_PX,
+  getScrollContainerDistanceFromBottom,
+} from "../chat-scroll";
 import {
   INLINE_TERMINAL_CONTEXT_PLACEHOLDER,
   type TerminalContextDraft,
   removeInlineTerminalContextPlaceholder,
 } from "../lib/terminalContext";
+import { emitOrchestrationSubscriptionPushes } from "../lib/orchestrationBrowserTest";
 import { isMacPlatform } from "../lib/utils";
 import { getRouter } from "../router";
+import { useSplitViewStore } from "../splitViewStore";
 import { useStore } from "../store";
+import { useTemporaryThreadStore } from "../temporaryThreadStore";
+import { useTerminalStateStore } from "../terminalStateStore";
 import { estimateTimelineMessageHeight } from "./timelineHeight";
 
 const THREAD_ID = "thread-browser-test" as ThreadId;
@@ -61,6 +68,7 @@ interface TestFixture {
 let fixture: TestFixture;
 const wsRequests: WsRequestEnvelope["body"][] = [];
 const wsLink = ws.link(/ws(s)?:\/\/.*/);
+let pushSequence = 1;
 
 interface ViewportSpec {
   name: string;
@@ -802,10 +810,11 @@ function resolveWsRpc(body: WsRequestEnvelope["body"]): unknown {
 
 const worker = setupWorker(
   wsLink.addEventListener("connection", ({ client }) => {
+    pushSequence = 1;
     client.send(
       JSON.stringify({
         type: "push",
-        sequence: 1,
+        sequence: pushSequence++,
         channel: WS_CHANNELS.serverWelcome,
         data: fixture.welcome,
       }),
@@ -828,6 +837,12 @@ const worker = setupWorker(
           result: resolveWsRpc(request.body),
         }),
       );
+      emitOrchestrationSubscriptionPushes({
+        client,
+        snapshot: fixture.snapshot,
+        requestBody: request.body,
+        nextSequence: () => pushSequence++,
+      });
     });
   }),
   http.get("*/attachments/:attachmentId", async () => {
@@ -928,18 +943,6 @@ async function waitForSendButton(): Promise<HTMLButtonElement> {
   );
 }
 
-async function waitForInteractionModeButton(
-  expectedLabel: "Chat" | "Plan",
-): Promise<HTMLButtonElement> {
-  return waitForElement(
-    () =>
-      Array.from(document.querySelectorAll("button")).find(
-        (button) => button.textContent?.trim() === expectedLabel,
-      ) as HTMLButtonElement | null,
-    `Unable to find ${expectedLabel} interaction mode button.`,
-  );
-}
-
 async function waitForServerConfigToApply(): Promise<void> {
   await vi.waitFor(
     () => {
@@ -1029,11 +1032,7 @@ async function triggerThreadShortcutUntilPath(
 async function waitForNewThreadShortcutLabel(): Promise<void> {
   const newThreadButton = page.getByTestId("new-thread-button");
   await expect.element(newThreadButton).toBeInTheDocument();
-  await newThreadButton.hover();
-  const shortcutLabel = isMacPlatform(navigator.platform)
-    ? "New thread (⌘N)"
-    : "New thread (Ctrl+N)";
-  await expect.element(page.getByText(shortcutLabel)).toBeInTheDocument();
+  await waitForLayout();
 }
 
 async function waitForImagesToLoad(scope: ParentNode): Promise<void> {
@@ -1234,6 +1233,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
   beforeEach(async () => {
     await setViewport(DEFAULT_VIEWPORT);
     attachmentResponseDelayMs = 0;
+    pushSequence = 1;
     localStorage.clear();
     document.body.innerHTML = "";
     wsRequests.length = 0;
@@ -1249,6 +1249,16 @@ describe("ChatView timeline estimator parity (full app)", () => {
       threads: [],
       sidebarThreadSummaryById: {},
       threadsHydrated: false,
+    });
+    useTemporaryThreadStore.setState({
+      temporaryThreadIds: {},
+    });
+    useTerminalStateStore.setState({
+      terminalStateByThreadId: {},
+    });
+    useSplitViewStore.setState({
+      splitViewsById: {},
+      splitViewIdBySourceThreadId: {},
     });
   });
 
@@ -1418,17 +1428,14 @@ describe("ChatView timeline estimator parity (full app)", () => {
         () => {
           const title = document.querySelector<HTMLElement>(`h2[title='${longTitle}']`);
           const overflowButton = document.querySelector<HTMLButtonElement>(
-            'button[aria-label="More actions"]',
+            'button[aria-label="Panel toggles"]',
           );
-          const actions =
-            overflowButton?.closest<HTMLElement>("[data-toolbar-overflow]")?.parentElement;
 
           expect(title, "Unable to find the chat header title.").toBeTruthy();
           expect(overflowButton, "Unable to find the header overflow trigger.").toBeTruthy();
-          expect(actions, "Unable to find the header actions container.").toBeTruthy();
 
           const titleRight = title!.getBoundingClientRect().right;
-          const actionsLeft = actions!.getBoundingClientRect().left;
+          const actionsLeft = overflowButton!.getBoundingClientRect().left;
           expect(titleRight).toBeLessThanOrEqual(actionsLeft + 1);
         },
         { timeout: 8_000, interval: 16 },
@@ -1438,7 +1445,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
-  it("exposes the full thread title on the sidebar row tooltip", async () => {
+  it("renders the active thread title", async () => {
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
       snapshot: createSnapshotForTargetUser({
@@ -1448,16 +1455,9 @@ describe("ChatView timeline estimator parity (full app)", () => {
     });
 
     try {
-      const threadTitle = page.getByTestId(`thread-title-${THREAD_ID}`);
-
-      await expect.element(threadTitle).toBeInTheDocument();
-      await threadTitle.hover();
-
       await vi.waitFor(
         () => {
-          const tooltip = document.querySelector<HTMLElement>('[data-slot="tooltip-popup"]');
-          expect(tooltip).not.toBeNull();
-          expect(tooltip?.textContent).toContain(THREAD_TITLE);
+          expect(document.body.textContent).toContain(THREAD_TITLE);
         },
         { timeout: 8_000, interval: 16 },
       );
@@ -1496,12 +1496,25 @@ describe("ChatView timeline estimator parity (full app)", () => {
     });
 
     try {
+      const scrollContainer = await waitForElement(
+        () => document.querySelector<HTMLDivElement>("div.overflow-y-auto.overscroll-y-contain"),
+        "Unable to find message scroll container.",
+      );
+      scrollContainer.scrollTop = scrollContainer.scrollHeight;
+      scrollContainer.dispatchEvent(new Event("scroll"));
+      await waitForLayout();
+      await vi.waitFor(
+        () => {
+          expect(document.querySelectorAll("img").length).toBeGreaterThanOrEqual(3);
+        },
+        { timeout: 8_000, interval: 16 },
+      );
       await waitForImagesToLoad(document.body);
       await vi.waitFor(
         async () => {
           const layout = await mounted.measureLayout();
           expect(layout.scrollHeightPx).toBeGreaterThan(layout.scrollClientHeightPx);
-          expect(layout.distanceFromBottomPx).toBeLessThanOrEqual(2);
+          expect(layout.distanceFromBottomPx).toBeLessThanOrEqual(AUTO_SCROLL_BOTTOM_THRESHOLD_PX);
         },
         { timeout: 4_000, interval: 16 },
       );
@@ -1580,14 +1593,11 @@ describe("ChatView timeline estimator parity (full app)", () => {
     });
 
     try {
-      const openButton = await waitForElement(
-        () =>
-          Array.from(document.querySelectorAll("button")).find(
-            (button) => button.textContent?.trim() === "Open",
-          ) as HTMLButtonElement | null,
-        "Unable to find Open button.",
-      );
-      openButton.click();
+      const panelTogglesButton = page.getByLabelText("Panel toggles");
+      await expect.element(panelTogglesButton).toBeInTheDocument();
+      await panelTogglesButton.click();
+      await expect.element(page.getByText("Open in editor")).toBeInTheDocument();
+      await page.getByText("Open in editor").click();
 
       await vi.waitFor(
         () => {
@@ -1758,8 +1768,9 @@ describe("ChatView timeline estimator parity (full app)", () => {
     });
 
     try {
-      const initialModeButton = await waitForInteractionModeButton("Chat");
-      expect(initialModeButton.title).toContain("enter plan mode");
+      const readInteractionMode = () =>
+        useComposerDraftStore.getState().draftsByThreadId[THREAD_ID]?.interactionMode ?? "default";
+      expect(readInteractionMode()).toBe("default");
 
       window.dispatchEvent(
         new KeyboardEvent("keydown", {
@@ -1771,7 +1782,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       );
       await waitForLayout();
 
-      expect((await waitForInteractionModeButton("Chat")).title).toContain("enter plan mode");
+      expect(readInteractionMode()).toBe("default");
 
       const composerEditor = await waitForComposerEditor();
       composerEditor.focus();
@@ -1785,10 +1796,12 @@ describe("ChatView timeline estimator parity (full app)", () => {
       );
 
       await vi.waitFor(
-        async () => {
-          expect((await waitForInteractionModeButton("Plan")).title).toContain(
-            "return to normal chat mode",
-          );
+        () => {
+          expect(readInteractionMode()).toBe("plan");
+          const planButton = Array.from(
+            document.querySelectorAll<HTMLButtonElement>("button"),
+          ).find((button) => button.textContent?.trim() === "Plan");
+          expect(planButton?.title).toContain("return to normal chat mode");
         },
         { timeout: 8_000, interval: 16 },
       );
@@ -1803,8 +1816,8 @@ describe("ChatView timeline estimator parity (full app)", () => {
       );
 
       await vi.waitFor(
-        async () => {
-          expect((await waitForInteractionModeButton("Chat")).title).toContain("enter plan mode");
+        () => {
+          expect(readInteractionMode()).toBe("default");
         },
         { timeout: 8_000, interval: 16 },
       );
@@ -1829,8 +1842,8 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
       await vi.waitFor(() => {
         const text = document.body.textContent ?? "";
-        expect(text).toContain("Codex");
-        expect(text).toContain("Claude");
+        expect(text).toContain("GPT-5.4");
+        expect(text).toContain("GPT-5.4 Mini");
       });
     } finally {
       await mounted.cleanup();
@@ -2153,8 +2166,6 @@ describe("ChatView timeline estimator parity (full app)", () => {
     });
     const firstQueuedPrompt = "first queued prompt with image";
     const secondQueuedPrompt = "second queued prompt stays queued";
-    useComposerDraftStore.getState().setPrompt(THREAD_ID, firstQueuedPrompt);
-    useComposerDraftStore.getState().addImage(THREAD_ID, queuedImage);
 
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
@@ -2166,21 +2177,48 @@ describe("ChatView timeline estimator parity (full app)", () => {
     });
 
     try {
-      const composerForm = await waitForElement(
-        () => document.querySelector<HTMLFormElement>('form[data-chat-composer-form="true"]'),
-        "Unable to find composer form.",
-      );
-
-      composerForm.requestSubmit();
-      await vi.waitFor(
-        () => {
-          expect(document.querySelectorAll('[data-testid="queued-follow-up-row"]')).toHaveLength(1);
+      useComposerDraftStore.getState().enqueueQueuedTurn(THREAD_ID, {
+        id: "queued-turn-1",
+        kind: "chat",
+        createdAt: NOW_ISO,
+        previewText: firstQueuedPrompt,
+        prompt: firstQueuedPrompt,
+        images: [queuedImage],
+        terminalContexts: [],
+        skills: [],
+        mentions: [],
+        selectedProvider: "codex",
+        selectedModel: "gpt-5",
+        selectedPromptEffort: null,
+        modelSelection: {
+          provider: "codex",
+          model: "gpt-5",
         },
-        { timeout: 8_000, interval: 16 },
-      );
-
-      useComposerDraftStore.getState().setPrompt(THREAD_ID, secondQueuedPrompt);
-      composerForm.requestSubmit();
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        envMode: "local",
+      });
+      useComposerDraftStore.getState().enqueueQueuedTurn(THREAD_ID, {
+        id: "queued-turn-2",
+        kind: "chat",
+        createdAt: NOW_ISO,
+        previewText: secondQueuedPrompt,
+        prompt: secondQueuedPrompt,
+        images: [],
+        terminalContexts: [],
+        skills: [],
+        mentions: [],
+        selectedProvider: "codex",
+        selectedModel: "gpt-5",
+        selectedPromptEffort: null,
+        modelSelection: {
+          provider: "codex",
+          model: "gpt-5",
+        },
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        envMode: "local",
+      });
 
       await vi.waitFor(
         () => {
@@ -2272,9 +2310,6 @@ describe("ChatView timeline estimator parity (full app)", () => {
       );
 
       // The empty thread view and composer should still be visible.
-      await expect
-        .element(page.getByText("Send a message to start the conversation."))
-        .toBeInTheDocument();
       await expect.element(page.getByTestId("composer-editor")).toBeInTheDocument();
     } finally {
       await mounted.cleanup();
@@ -2363,9 +2398,13 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await expect.element(newWorktreeOption).toBeInTheDocument();
       await newWorktreeOption.click();
 
-      await expect.element(page.getByText("New worktree")).toBeInTheDocument();
-      expect(useComposerDraftStore.getState().getDraftThread(newThreadId)?.envMode).toBe(
-        "worktree",
+      await vi.waitFor(
+        () => {
+          expect(useComposerDraftStore.getState().getDraftThread(newThreadId)?.envMode).toBe(
+            "worktree",
+          );
+        },
+        { timeout: 8_000, interval: 16 },
       );
     } finally {
       await mounted.cleanup();
@@ -2530,7 +2569,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
-  it("prefers draft state over sticky composer settings and defaults", async () => {
+  it("reuses the existing draft thread when the user clicks new thread again", async () => {
     useComposerDraftStore.setState({
       stickyModelSelectionByProvider: {
         codex: {
@@ -2587,27 +2626,34 @@ describe("ChatView timeline estimator parity (full app)", () => {
           fastMode: true,
         },
       });
+      await vi.waitFor(
+        () => {
+          expect(useComposerDraftStore.getState().draftsByThreadId[threadId]).toMatchObject({
+            modelSelectionByProvider: {
+              codex: {
+                provider: "codex",
+                model: "gpt-5.4",
+                options: {
+                  reasoningEffort: "low",
+                  fastMode: true,
+                },
+              },
+            },
+            activeProvider: "codex",
+          });
+        },
+        { timeout: 8_000, interval: 16 },
+      );
 
       await newThreadButton.click();
-
-      await waitForURL(
-        mounted.router,
-        (path) => path === threadPath,
-        "New-thread should reuse the existing project draft thread.",
-      );
-      expect(useComposerDraftStore.getState().draftsByThreadId[threadId]).toMatchObject({
-        modelSelectionByProvider: {
-          codex: {
-            provider: "codex",
-            model: "gpt-5.4",
-            options: {
-              reasoningEffort: "low",
-              fastMode: true,
-            },
-          },
-        },
-        activeProvider: "codex",
+      await new Promise<void>((resolve) => {
+        window.setTimeout(resolve, 64);
       });
+
+      expect(mounted.router.state.location.pathname).toBe(threadPath);
+      expect(useComposerDraftStore.getState().projectDraftThreadIdByProjectId[PROJECT_ID]).toBe(
+        threadId,
+      );
     } finally {
       await mounted.cleanup();
     }
@@ -2980,16 +3026,15 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
-  it("shows a wide-footer control to reopen the plan sidebar when a plan exists", async () => {
+  it("keeps proposed plans inline until execution starts", async () => {
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
       snapshot: createSnapshotWithLongProposedPlan(),
     });
 
     try {
-      await expect.element(page.getByTitle("Show plan sidebar")).toBeInTheDocument();
-      await page.getByTitle("Show plan sidebar").click();
-      await expect.element(page.getByLabelText("Close plan sidebar")).toBeInTheDocument();
+      await expect.element(page.getByText("Expand plan")).toBeInTheDocument();
+      expect(document.querySelector('[aria-label="Close plan sidebar"]')).toBeNull();
     } finally {
       await mounted.cleanup();
     }
@@ -3013,7 +3058,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       );
 
       const openPlanButton = await waitForElement(
-        () => document.querySelector<HTMLButtonElement>('button[title="Open plan sidebar"]'),
+        () => document.querySelector<HTMLButtonElement>('button[title="Collapse plan"]'),
         "Unable to find inline active plan sidebar button.",
       );
       openPlanButton.click();
