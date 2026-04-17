@@ -2,9 +2,9 @@
  * FILE: homeMigration.ts
  * Purpose: Imports legacy ~/.t3 state into the new ~/.dpcode home on first startup.
  * Layer: Startup utility
- * Depends on: config path derivation, Effect filesystem/path services, and node:sqlite snapshots
+ * Depends on: config path derivation, Effect filesystem/path services, and bun:sqlite snapshots
  */
-import { DatabaseSync } from "node:sqlite";
+import { Database } from "bun:sqlite";
 
 import { Data, Effect, FileSystem, Path } from "effect";
 
@@ -122,7 +122,7 @@ const snapshotSqliteDatabase = (sourcePath: string, targetPath: string) =>
   Effect.try({
     try: () => {
       const escapedTargetPath = targetPath.replaceAll("'", "''");
-      const sourceDb = new DatabaseSync(sourcePath, { readOnly: true });
+      const sourceDb = new Database(sourcePath, { readonly: true });
       try {
         sourceDb.exec(`VACUUM INTO '${escapedTargetPath}'`);
       } finally {

@@ -2,12 +2,12 @@
  * FILE: homeMigration.test.ts
  * Purpose: Verifies first-run import and resume behavior for the ~/.t3 -> ~/.dpcode migration.
  * Layer: Server startup tests
- * Depends on: deriveServerPaths, node:sqlite fixtures, and the migration marker contract
+ * Depends on: deriveServerPaths, bun:sqlite fixtures, and the migration marker contract
  */
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import { Database } from "bun:sqlite";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
@@ -23,7 +23,7 @@ import {
 
 // Creates the minimal sqlite state the migration needs to prove DB contents moved correctly.
 const createProjectDb = (dbPath: string, title: string) => {
-  const db = new DatabaseSync(dbPath);
+  const db = new Database(dbPath);
   try {
     db.exec("CREATE TABLE projects(id TEXT PRIMARY KEY, title TEXT);");
     const statement = db.prepare("INSERT INTO projects(id, title) VALUES (?, ?);");
@@ -35,7 +35,7 @@ const createProjectDb = (dbPath: string, title: string) => {
 
 // Reads back the migrated row so tests can assert which home currently owns the DB.
 const readProjectTitle = (dbPath: string): string | undefined => {
-  const db = new DatabaseSync(dbPath, { readOnly: true });
+  const db = new Database(dbPath, { readonly: true });
   try {
     const row = db.prepare("SELECT title FROM projects WHERE id = ?").get("project-1") as
       | { readonly title?: string }

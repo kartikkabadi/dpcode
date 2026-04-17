@@ -1,10 +1,10 @@
 /**
- * Port of `@effect/sql-sqlite-node` that uses the native `node:sqlite`
+ * Port of `@effect/sql-sqlite-bun` that uses the native `bun:sqlite`
  * bindings instead of `better-sqlite3`.
  *
  * @module SqliteClient
  */
-import { DatabaseSync, type StatementSync } from "node:sqlite";
+import { Database as BunDatabase, type Statement as BunStatement } from "bun:sqlite";
 
 import * as Cache from "effect/Cache";
 import * as Config from "effect/Config";
@@ -51,33 +51,23 @@ export interface SqliteMemoryClientConfig extends Omit<
 > {}
 
 /**
- * Verify that the current Node.js version includes the `node:sqlite` APIs
- * used by `NodeSqliteClient` — specifically `StatementSync.columns()` (added
- * in Node 22.16.0 / 23.11.0).
- *
- * @see https://github.com/nodejs/node/pull/57490
+ * Verify that the current Bun version includes the `bun:sqlite` APIs
+ * used by `NodeSqliteClient` — specifically `Statement.columnNames` and
+ * `Statement.safeIntegers()`.
  */
-const checkNodeSqliteCompat = () => {
-  const parts = process.versions.node.split(".").map(Number);
-  const major = parts[0] ?? 0;
-  const minor = parts[1] ?? 0;
-  const supported = (major === 22 && minor >= 16) || (major === 23 && minor >= 11) || major >= 24;
-
-  if (!supported) {
-    return Effect.die(
-      `Node.js ${process.versions.node} is missing required node:sqlite APIs ` +
-        `(StatementSync.columns). Upgrade to Node.js >=22.16, >=23.11, or >=24.`,
-    );
+const checkBunSqliteCompat = () => {
+  if (process.versions.bun === undefined) {
+    return Effect.die("bun:sqlite requires the Bun runtime.");
   }
   return Effect.void;
 };
 
 const makeWithDatabase = (
   options: SqliteClientConfig,
-  openDatabase: () => DatabaseSync,
+  openDatabase: () => BunDatabase,
 ): Effect.Effect<Client.SqlClient, never, Scope.Scope | Reactivity.Reactivity> =>
   Effect.gen(function* () {
-    yield* checkNodeSqliteCompat();
+    yield* checkBunSqliteCompat();
 
     const compiler = Statement.makeCompilerSqlite(options.transformQueryNames);
     const transformRows = options.transformResultNames
@@ -92,13 +82,13 @@ const makeWithDatabase = (
         Effect.sync(() => db.close()),
       );
 
-      const statementReaderCache = new WeakMap<StatementSync, boolean>();
-      const hasRows = (statement: StatementSync): boolean => {
+      const statementReaderCache = new WeakMap<BunStatement, boolean>();
+      const hasRows = (statement: BunStatement): boolean => {
         const cached = statementReaderCache.get(statement);
         if (cached !== undefined) {
           return cached;
         }
-        const value = statement.columns().length > 0;
+        const value = statement.columnNames.length > 0;
         statementReaderCache.set(statement, value);
         return value;
       };
@@ -114,12 +104,12 @@ const makeWithDatabase = (
       });
 
       const runStatement = (
-        statement: StatementSync,
+        statement: BunStatement,
         params: ReadonlyArray<unknown>,
         raw: boolean,
       ) =>
         Effect.withFiber<ReadonlyArray<any>, SqlError>((fiber) => {
-          statement.setReadBigInts(Boolean(ServiceMap.get(fiber.services, Client.SafeIntegers)));
+          statement.safeIntegers(Boolean(ServiceMap.get(fiber.services, Client.SafeIntegers)));
           try {
             if (hasRows(statement)) {
               return Effect.succeed(statement.all(...(params as any)));
@@ -135,29 +125,20 @@ const makeWithDatabase = (
         Effect.flatMap(Cache.get(prepareCache, sql), (s) => runStatement(s, params, raw));
 
       const runValues = (sql: string, params: ReadonlyArray<unknown>) =>
-        Effect.acquireUseRelease(
-          Cache.get(prepareCache, sql),
-          (statement) =>
-            Effect.try({
-              try: () => {
-                if (hasRows(statement)) {
-                  statement.setReturnArrays(true);
-                  // Safe to cast to array after we've setReturnArrays(true)
-                  return statement.all(...(params as any)) as unknown as ReadonlyArray<
-                    ReadonlyArray<unknown>
-                  >;
-                }
-                statement.run(...(params as any));
-                return [];
-              },
-              catch: (cause) => new SqlError({ cause, message: "Failed to execute statement" }),
-            }),
-          (statement) =>
-            Effect.sync(() => {
+        Effect.flatMap(Cache.get(prepareCache, sql), (statement) =>
+          Effect.try({
+            try: () => {
+              statement.safeIntegers(false);
               if (hasRows(statement)) {
-                statement.setReturnArrays(false);
+                return statement.values(...(params as any)) as unknown as ReadonlyArray<
+                  ReadonlyArray<unknown>
+                >;
               }
-            }),
+              statement.run(...(params as any));
+              return [];
+            },
+            catch: (cause) => new SqlError({ cause, message: "Failed to execute statement" }),
+          }),
         );
 
       return identity<Connection>({
@@ -213,10 +194,9 @@ const make = (
   makeWithDatabase(
     options,
     () =>
-      new DatabaseSync(options.filename, {
-        readOnly: options.readonly ?? false,
-        allowExtension: options.allowExtension ?? false,
-      }),
+      options.readonly
+        ? new BunDatabase(options.filename, { readonly: true })
+        : new BunDatabase(options.filename),
   );
 
 const makeMemory = (
@@ -229,10 +209,7 @@ const makeMemory = (
       readonly: false,
     },
     () => {
-      const database = new DatabaseSync(":memory:", {
-        allowExtension: config.allowExtension ?? false,
-      });
-      return database;
+      return new BunDatabase(":memory:");
     },
   );
 
