@@ -38,7 +38,7 @@ import {
   parseCodexCliVersion,
 } from "../codexCliVersion";
 import { ServerConfig } from "../../config";
-import { probeGeminiCapabilities } from "../geminiAcpProbe";
+import { normalizeGeminiCapabilityProbeResult, probeGeminiCapabilities } from "../geminiAcpProbe";
 import { ProviderHealth, type ProviderHealthShape } from "../Services/ProviderHealth";
 import {
   orderProviderStatuses,
@@ -728,7 +728,7 @@ export const checkGeminiProviderStatus: Effect.Effect<
 
   const capabilityProbe = yield* probeGeminiCapabilities({
     binaryPath: "gemini",
-    cwd: process.cwd(),
+    cwd: OS.homedir(),
   }).pipe(Effect.result);
 
   if (Result.isFailure(capabilityProbe)) {
@@ -746,7 +746,7 @@ export const checkGeminiProviderStatus: Effect.Effect<
     };
   }
 
-  const parsed = capabilityProbe.success;
+  const parsed = normalizeGeminiCapabilityProbeResult(capabilityProbe.success);
   return {
     provider: GEMINI_PROVIDER,
     status: parsed.status,
