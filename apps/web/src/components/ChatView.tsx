@@ -5664,9 +5664,9 @@ export default function ChatView({
   // Empty state: no active thread
   if (!activeThread) {
     return (
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background text-muted-foreground/40">
+      <div className="glass-panel overflow-hidden flex min-h-0 min-w-0 flex-1 flex-col bg-background/40 text-muted-foreground/40">
         {!isElectron && (
-          <header className="border-b border-border px-3 py-2 md:hidden">
+          <header className="glass-panel border-b border-border/60 bg-background/50 px-3 py-2 md:hidden">
             <div className="flex items-center gap-2">
               <SidebarHeaderTrigger className="size-7 shrink-0" />
               <span className="text-sm font-medium text-foreground">Threads</span>
@@ -5676,7 +5676,7 @@ export default function ChatView({
         {isElectron && (
           <div
             className={cn(
-              "drag-region flex h-[52px] shrink-0 items-center border-b border-border px-5",
+              "glass-panel drag-region flex h-[52px] shrink-0 items-center border-b border-border/60 bg-background/50 px-5",
               settings.sidebarSide === "right" && "pl-[90px]",
             )}
           >
@@ -5694,11 +5694,11 @@ export default function ChatView({
   }
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
+    <div className="glass-panel overflow-hidden flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background/40">
       {/* Top bar */}
       <header
         className={cn(
-          "border-b border-border px-3 sm:px-5",
+          "glass-panel border-b border-border/60 bg-background/45 px-3 sm:px-5",
           isElectron ? "drag-region flex h-[52px] items-center" : "py-2 sm:py-3",
           isElectron && settings.sidebarSide === "right" && "pl-[90px] sm:pl-[90px]",
         )}
@@ -5862,7 +5862,7 @@ export default function ChatView({
                       <div
                         key={queuedTurn.id}
                         data-testid="queued-follow-up-row"
-                        className="chat-composer-surface flex items-center gap-2 rounded-t-2xl border border-b-0 border-border/60 bg-card px-2.5 py-2 text-[12px]"
+                        className="glass-panel glass-panel--soft overflow-hidden chat-composer-surface flex items-center gap-2 rounded-t-2xl border border-b-0 border-border/60 bg-card/50 px-2.5 py-2 text-[12px]"
                       >
                         <div className="flex min-w-0 flex-1 items-center gap-1.5">
                           <PiArrowBendDownRight className="size-3 shrink-0 text-muted-foreground/70" />
@@ -5925,7 +5925,7 @@ export default function ChatView({
                 >
                   <div
                     className={cn(
-                      "chat-composer-surface rounded-2xl border bg-card transition-colors duration-200 focus-within:border-neutral-500/15",
+                      "glass-panel glass-panel--strong overflow-hidden chat-composer-surface rounded-2xl border bg-card/55 transition-colors duration-200 focus-within:border-neutral-500/15",
                       isDragOverComposer ? "border-primary/50 bg-accent/20" : "border-border/60",
                       composerProviderState.composerSurfaceClassName,
                     )}
@@ -6418,21 +6418,23 @@ export default function ChatView({
 
         {/* Plan sidebar */}
         {planSidebarOpen ? (
-          <PlanSidebar
-            activePlan={activePlan}
-            activeProposedPlan={sidebarProposedPlan}
-            markdownCwd={threadWorkspaceCwd ?? undefined}
-            workspaceRoot={activeProject?.cwd ?? undefined}
-            timestampFormat={timestampFormat}
-            onClose={() => {
-              setPlanSidebarOpen(false);
-              // Track that the user explicitly dismissed for this turn so auto-open won't fight them.
-              const turnKey = activePlan?.turnId ?? sidebarProposedPlan?.turnId ?? null;
-              if (turnKey) {
-                planSidebarDismissedForTurnRef.current = turnKey;
-              }
-            }}
-          />
+          <div className="glass-panel glass-panel--soft h-full shrink-0">
+            <PlanSidebar
+              activePlan={activePlan}
+              activeProposedPlan={sidebarProposedPlan}
+              markdownCwd={threadWorkspaceCwd ?? undefined}
+              workspaceRoot={activeProject?.cwd ?? undefined}
+              timestampFormat={timestampFormat}
+              onClose={() => {
+                setPlanSidebarOpen(false);
+                // Track that the user explicitly dismissed for this turn so auto-open won't fight them.
+                const turnKey = activePlan?.turnId ?? sidebarProposedPlan?.turnId ?? null;
+                if (turnKey) {
+                  planSidebarDismissedForTurnRef.current = turnKey;
+                }
+              }}
+            />
+          </div>
         ) : null}
       </div>
       {/* end horizontal flex container */}

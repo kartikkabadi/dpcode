@@ -217,7 +217,7 @@ function Sidebar({
       <SidebarInstanceContext.Provider value={instanceContextValue}>
         <div
           className={cn(
-            "flex h-full w-(--sidebar-width) flex-col bg-sidebar text-sidebar-foreground",
+            "glass-panel glass-panel--strong overflow-hidden flex h-full w-(--sidebar-width) flex-col text-sidebar-foreground",
             innerClassName,
             className,
           )}
@@ -236,7 +236,7 @@ function Sidebar({
         <Sheet onOpenChange={setOpenMobile} open={openMobile} {...props}>
           <SheetPopup
             className={cn(
-              "w-(--sidebar-width) max-w-none bg-sidebar p-0 text-sidebar-foreground",
+              "glass-panel glass-panel--strong overflow-hidden w-(--sidebar-width) max-w-none p-0 text-sidebar-foreground",
               className,
             )}
             data-mobile="true"
@@ -308,8 +308,7 @@ function Sidebar({
               fixed positioning, width transitions, and the resize rail hit area. */}
           <div
             className={cn(
-              "flex h-full w-full flex-col group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:border-sidebar-border group-data-[variant=floating]:shadow-sm/5",
-              !transparentSurface && "bg-sidebar",
+              "flex h-full w-full flex-col bg-transparent group-data-[variant=floating]:rounded-2xl group-data-[variant=floating]:shadow-[0_24px_80px_rgba(15,23,42,0.12)]",
               innerClassName,
             )}
             data-sidebar="sidebar"
@@ -646,7 +645,7 @@ function SidebarInset({ className, children, ...props }: React.ComponentProps<"m
       className={cn(
         // Keep caller layout classes on the outer shell so route-level height and
         // overflow constraints still apply after the inner-surface refactor.
-        "relative flex min-h-0 min-w-0 w-full flex-1 flex-col bg-background",
+        "glass-panel relative flex min-h-0 min-w-0 w-full flex-1 flex-col bg-background/40",
         "md:peer-data-[variant=sidebar]:peer-data-[side=left]:peer-data-[state=expanded]:-ms-[var(--sidebar-width)]",
         "md:peer-data-[variant=sidebar]:peer-data-[side=left]:peer-data-[state=expanded]:w-[calc(100%+var(--sidebar-width))]",
         "md:peer-data-[variant=sidebar]:peer-data-[side=left]:peer-data-[state=expanded]:ps-[var(--sidebar-width)]",
@@ -663,7 +662,7 @@ function SidebarInset({ className, children, ...props }: React.ComponentProps<"m
       {/* Inner surface lives inside the content-box so rounded corners
           and bg are visible even when padding offsets the sidebar area. */}
       <div
-        className="flex min-h-0 min-w-0 flex-1 flex-col bg-background text-inherit"
+        className="flex min-h-0 min-w-0 flex-1 flex-col bg-transparent text-inherit"
         data-slot="sidebar-inset-surface"
       >
         {children}
@@ -708,7 +707,7 @@ function SidebarFooter({ className, ...props }: React.ComponentProps<"div">) {
 function SidebarSeparator({ className, ...props }: React.ComponentProps<typeof Separator>) {
   return (
     <Separator
-      className={cn("mx-2 w-auto bg-sidebar-border", className)}
+      className={cn("mx-2 w-auto bg-sidebar-border/60", className)}
       data-sidebar="separator"
       data-slot="sidebar-separator"
       {...props}
@@ -828,9 +827,9 @@ const sidebarMenuButtonVariants = cva(
         sm: "h-7 text-xs",
       },
       variant: {
-        default: "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+        default: "hover:bg-sidebar-accent/55 hover:text-sidebar-accent-foreground",
         outline:
-          "bg-background shadow-[0_0_0_1px_hsl(var(--sidebar-border))] hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:shadow-[0_0_0_1px_hsl(var(--sidebar-accent))]",
+          "bg-background/40 backdrop-blur-xl shadow-[0_0_0_1px_hsl(var(--sidebar-border))] hover:bg-sidebar-accent/55 hover:text-sidebar-accent-foreground hover:shadow-[0_0_0_1px_hsl(var(--sidebar-accent))]",
       },
     },
   },
@@ -925,7 +924,7 @@ function SidebarMenuBadge({ className, ...props }: React.ComponentProps<"div">) 
   return (
     <div
       className={cn(
-        "pointer-events-none absolute right-1 flex h-5 min-w-5 select-none items-center justify-center rounded-lg px-1 font-medium text-sidebar-foreground text-xs tabular-nums",
+        "pointer-events-none absolute right-1 flex h-5 min-w-5 select-none items-center justify-center rounded-lg border border-white/10 bg-background/45 px-1 font-medium text-sidebar-foreground text-xs tabular-nums backdrop-blur-xl",
         "peer-hover/menu-button:text-sidebar-accent-foreground peer-data-[active=true]/menu-button:text-sidebar-accent-foreground",
         "peer-data-[size=sm]/menu-button:top-1",
         "peer-data-[size=default]/menu-button:top-1.5",
@@ -954,7 +953,7 @@ function SidebarMenuSkeleton({
 
   return (
     <div
-      className={cn("flex h-8 items-center gap-2 rounded-lg px-2", className)}
+      className={cn("flex h-8 items-center gap-2 rounded-lg border border-white/10 bg-background/45 px-2 backdrop-blur-xl", className)}
       data-sidebar="menu-skeleton"
       data-slot="sidebar-menu-skeleton"
       {...props}
@@ -977,7 +976,7 @@ function SidebarMenuSub({ className, ...props }: React.ComponentProps<"ul">) {
   return (
     <ul
       className={cn(
-        "mx-3.5 flex min-w-0 translate-x-px flex-col gap-1 border-sidebar-border border-l px-2.5 py-0.5",
+        "mx-3.5 flex min-w-0 translate-x-px flex-col gap-1 border-sidebar-border/60 border-l px-2.5 py-0.5",
         "group-data-[collapsible=icon]:hidden",
         className,
       )}
