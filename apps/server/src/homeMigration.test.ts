@@ -2,12 +2,12 @@
  * FILE: homeMigration.test.ts
  * Purpose: Verifies first-run import and resume behavior for the ~/.t3 -> ~/.dpcode migration.
  * Layer: Server startup tests
- * Depends on: deriveServerPaths, bun:sqlite fixtures, and the migration marker contract
+ * Depends on: deriveServerPaths, sqlite fixtures, and the migration marker contract
  */
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { Database } from "bun:sqlite";
+import Database from "better-sqlite3";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";

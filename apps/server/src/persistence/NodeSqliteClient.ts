@@ -1,11 +1,9 @@
 /**
- * Port of `@effect/sql-sqlite-bun` that uses the native `bun:sqlite`
- * bindings instead of `better-sqlite3`.
+ * Port of `better-sqlite3` behind the Effect SQL client interface.
  *
  * @module SqliteClient
  */
-import { Database as BunDatabase, type Statement as BunStatement } from "bun:sqlite";
-
+import Database from "better-sqlite3";
 import * as Cache from "effect/Cache";
 import * as Config from "effect/Config";
 import * as Duration from "effect/Duration";
@@ -22,6 +20,9 @@ import * as Client from "effect/unstable/sql/SqlClient";
 import type { Connection } from "effect/unstable/sql/SqlConnection";
 import { SqlError } from "effect/unstable/sql/SqlError";
 import * as Statement from "effect/unstable/sql/Statement";
+
+type BetterSqliteDatabase = InstanceType<typeof Database>;
+type BetterSqliteStatement = ReturnType<BetterSqliteDatabase["prepare"]>;
 
 const ATTR_DB_SYSTEM_NAME = "db.system.name";
 
@@ -51,23 +52,17 @@ export interface SqliteMemoryClientConfig extends Omit<
 > {}
 
 /**
- * Verify that the current Bun version includes the `bun:sqlite` APIs
- * used by `NodeSqliteClient` — specifically `Statement.columnNames` and
- * `Statement.safeIntegers()`.
+ * Verify that the current Node runtime can load the native sqlite binding
+ * used by `NodeSqliteClient`.
  */
-const checkBunSqliteCompat = () => {
-  if (process.versions.bun === undefined) {
-    return Effect.die("bun:sqlite requires the Bun runtime.");
-  }
-  return Effect.void;
-};
+const checkBetterSqliteCompat = () => Effect.void;
 
 const makeWithDatabase = (
   options: SqliteClientConfig,
-  openDatabase: () => BunDatabase,
+  openDatabase: () => BetterSqliteDatabase,
 ): Effect.Effect<Client.SqlClient, never, Scope.Scope | Reactivity.Reactivity> =>
   Effect.gen(function* () {
-    yield* checkBunSqliteCompat();
+    yield* checkBetterSqliteCompat();
 
     const compiler = Statement.makeCompilerSqlite(options.transformQueryNames);
     const transformRows = options.transformResultNames
@@ -82,13 +77,13 @@ const makeWithDatabase = (
         Effect.sync(() => db.close()),
       );
 
-      const statementReaderCache = new WeakMap<BunStatement, boolean>();
-      const hasRows = (statement: BunStatement): boolean => {
+      const statementReaderCache = new WeakMap<BetterSqliteStatement, boolean>();
+      const hasRows = (statement: BetterSqliteStatement): boolean => {
         const cached = statementReaderCache.get(statement);
         if (cached !== undefined) {
           return cached;
         }
-        const value = statement.columnNames.length > 0;
+        const value = statement.columns().length > 0;
         statementReaderCache.set(statement, value);
         return value;
       };
@@ -104,7 +99,7 @@ const makeWithDatabase = (
       });
 
       const runStatement = (
-        statement: BunStatement,
+        statement: BetterSqliteStatement,
         params: ReadonlyArray<unknown>,
         raw: boolean,
       ) =>
@@ -125,20 +120,31 @@ const makeWithDatabase = (
         Effect.flatMap(Cache.get(prepareCache, sql), (s) => runStatement(s, params, raw));
 
       const runValues = (sql: string, params: ReadonlyArray<unknown>) =>
-        Effect.flatMap(Cache.get(prepareCache, sql), (statement) =>
-          Effect.try({
-            try: () => {
-              statement.safeIntegers(false);
-              if (hasRows(statement)) {
-                return statement.values(...(params as any)) as unknown as ReadonlyArray<
-                  ReadonlyArray<unknown>
-                >;
-              }
-              statement.run(...(params as any));
-              return [];
-            },
-            catch: (cause) => new SqlError({ cause, message: "Failed to execute statement" }),
-          }),
+        Effect.withFiber<ReadonlyArray<any>, SqlError>((fiber) =>
+          Effect.acquireUseRelease(
+            Cache.get(prepareCache, sql),
+            (statement) =>
+              Effect.try({
+                try: () => {
+                  statement.safeIntegers(Boolean(ServiceMap.get(fiber.services, Client.SafeIntegers)));
+                  if (hasRows(statement)) {
+                    statement.raw(true);
+                    return statement.all(...(params as any)) as unknown as ReadonlyArray<
+                      ReadonlyArray<unknown>
+                    >;
+                  }
+                  statement.run(...(params as any));
+                  return [];
+                },
+                catch: (cause) => new SqlError({ cause, message: "Failed to execute statement" }),
+              }),
+            (statement) =>
+              Effect.sync(() => {
+                if (hasRows(statement)) {
+                  statement.raw(false);
+                }
+              }),
+          ),
         );
 
       return identity<Connection>({
@@ -194,9 +200,7 @@ const make = (
   makeWithDatabase(
     options,
     () =>
-      options.readonly
-        ? new BunDatabase(options.filename, { readonly: true })
-        : new BunDatabase(options.filename),
+      new Database(options.filename, { readonly: options.readonly ?? false }),
   );
 
 const makeMemory = (
@@ -209,7 +213,7 @@ const makeMemory = (
       readonly: false,
     },
     () => {
-      return new BunDatabase(":memory:");
+      return new Database(":memory:");
     },
   );
 

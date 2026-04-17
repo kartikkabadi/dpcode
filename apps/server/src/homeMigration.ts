@@ -2,9 +2,9 @@
  * FILE: homeMigration.ts
  * Purpose: Imports legacy ~/.t3 state into the new ~/.dpcode home on first startup.
  * Layer: Startup utility
- * Depends on: config path derivation, Effect filesystem/path services, and bun:sqlite snapshots
+ * Depends on: config path derivation, Effect filesystem/path services, and sqlite snapshots
  */
-import { Database } from "bun:sqlite";
+import Database from "better-sqlite3";
 
 import { Data, Effect, FileSystem, Path } from "effect";
 
